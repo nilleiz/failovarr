@@ -2,7 +2,7 @@ name: qualification
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       full:
@@ -40,30 +40,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           FORCE_FULL: ${{ inputs.full }}
         run: |
-          python3 - <<'PY'
-          import os
-          import subprocess
-
-          manual_full = os.environ["EVENT_NAME"] == "workflow_dispatch" and os.environ.get("FORCE_FULL", "true") == "true"
-          if manual_full:
-              changed = ["manual full qualification"]
-          else:
-              base = os.environ.get("BASE_SHA")
-              changed = subprocess.check_output(["git", "diff", "--name-only", f"{base}...HEAD"], text=True).splitlines()
-
-          full = manual_full or any(path.startswith(".github/workflows/") or path.startswith("tools/ci/") or path.startswith("tests/") for path in changed)
-          runtime = any(path.startswith("failovarr/") for path in changed)
-          storage_change = any(any(token in path.lower() for token in ("storage", "vendor", "remote_storage")) for path in changed)
-          cluster_change = any(any(token in path.lower() for token in ("engine", "autostart", "domains", "transport", "vip", "planner", "client_identity", "integration_probe", "ci-cluster")) for path in changed)
-          package = full or runtime or any(path in {"requirements-vendor.txt", "tools/build_release.ps1"} for path in changed)
-          cluster = full or cluster_change
-          storage = full or storage_change
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              for key, value in {"package": package, "cluster": cluster, "storage": storage, "full": full}.items():
-                  output.write(f"{key}={str(value).lower()}\n")
-          print("FAILOVARR_CI_CHANGED=" + ",".join(changed))
-          print(f"FAILOVARR_CI_SELECTION=package:{package},cluster:{cluster},storage:{storage},full:{full}")
-          PY
+          python3 tools/ci/classify_changes.py \
+            --event "$EVENT_NAME" \
+            --force-full "$FORCE_FULL" \
+            --base "$BASE_SHA" \
+            --head HEAD \
+            --github-output "$GITHUB_OUTPUT"
       - name: Verify pull request test-impact declaration
         if: github.event_name == 'pull_request'
         env:

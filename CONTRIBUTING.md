@@ -9,10 +9,12 @@ affected feature IDs, behaviour change, required environments, coverage-matrix
 decision, and test additions/removals or the reason none are needed.
 
 The classifier selects lightweight checks for documentation-only changes and
-the relevant synthetic suites for runtime, cluster and storage changes.
-Release candidates always run the complete qualification set on their exact
-commit. Local production-like lab testing is operator-controlled and is not
-part of public CI.
+the relevant synthetic suites for runtime, cluster and storage changes. A
+release candidate runs one explicit complete qualification on its final PR
+tree. A squash merge reuses that evidence only when the PR is unambiguous, the
+Git tree is identical, and every required suite succeeded. Local
+production-like lab testing is operator-controlled and is not part of public
+CI.
 
 Use Python standard-library unit tests where possible. Synthetic CI fixtures
 must be invented data only. Do not make a feature "Implemented and verified"
