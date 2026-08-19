@@ -15,7 +15,9 @@ on:
         options: [prerelease, stable]
 
 permissions:
+  actions: read
   contents: write
+  pull-requests: read
 
 concurrency:
   group: failovarr-release
@@ -54,13 +56,14 @@ jobs:
           }
           "VERSION=$($manifest.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Require successful full qualification for this commit
+      - name: Require successful full qualification for this tree
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow qualification --commit "$GITHUB_SHA" --status completed --json conclusion,databaseId,event --jq '.[] | select(.conclusion == "success" and .event == "workflow_dispatch") | .databaseId' | head -n 1)"
-          test -n "$run" || { echo "A successful full qualification workflow is required for this exact commit." >&2; exit 1; }
-          echo "FAILOVARR_CI_QUALIFICATION_RUN=$run"
+          python3 tools/ci/verify_release_qualification.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA"
       - name: Build and validate Failovarr plugin ZIP
         shell: pwsh
         run: pwsh -NoProfile -File tools/build_release.ps1 -Version $env:VERSION

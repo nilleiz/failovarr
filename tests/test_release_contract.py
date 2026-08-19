@@ -31,7 +31,8 @@ class ReleaseContractTests(unittest.TestCase):
             "tools/build_release.ps1", "RELEASE_ID=", "upload_url",
             "Invoke-RestMethod", "-InFile", "Get-FileHash", "Invoke-WebRequest",
             ".upload-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT", ".zip.sha256",
-            "Upload and verify release assets", "Publish verified release",
+            "tools/ci/verify_release_qualification.py", "Upload and verify release assets",
+            "Publish verified release",
         ):
             self.assertIn(contract, workflow)
         self.assertIn("git/matching-refs/tags/$tag", workflow)
@@ -66,10 +67,9 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertEqual(workflows["test.yml"].count(checkout_pin), 5)
         self.assertIn(setup_python_pin, workflows["test.yml"])
         self.assertEqual(workflows["test.yml"].count(setup_python_pin), 2)
-        self.assertIn("qualification", workflows["test.yml"])
+        self.assertIn("tools/ci/classify_changes.py", workflows["test.yml"])
         self.assertIn("classify test impact", workflows["test.yml"])
-        self.assertIn(r'output.write(f"{key}={str(value).lower()}\n")', workflows["test.yml"])
-        self.assertNotIn(r'output.write(f"{key}={str(value).lower()}\\n")', workflows["test.yml"])
+        self.assertNotIn("ready_for_review", workflows["test.yml"])
 
     def test_canonical_english_wiki_pages_and_community_readme_exist(self):
         wiki = ROOT / "docs" / "wiki"

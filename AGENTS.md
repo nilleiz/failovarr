@@ -22,4 +22,7 @@ local Docker or production-like test environments unless an operator explicitly
 does so and supplies the result for analysis. An unreleased Draft-PR keeps its
 planned semantic version through CI corrections; increment it only for a new
 release candidate, after publication, or on explicit user direction. Release
-candidates require the full qualification set on the exact release commit.
+candidates require the full qualification set once on the final PR tree.
+After a squash merge, the release gate may reuse that evidence only when the
+merged PR is unambiguous, its tree ID is identical to `main`, and all required
+suites succeeded. Do not trigger tests merely by marking a Draft PR ready.
