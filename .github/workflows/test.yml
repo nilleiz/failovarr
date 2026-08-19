@@ -60,7 +60,7 @@ jobs:
           storage = full or storage_change
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               for key, value in {"package": package, "cluster": cluster, "storage": storage, "full": full}.items():
-                  output.write(f"{key}={str(value).lower()}\\n")
+                  output.write(f"{key}={str(value).lower()}\n")
           print("FAILOVARR_CI_CHANGED=" + ",".join(changed))
           print(f"FAILOVARR_CI_SELECTION=package:{package},cluster:{cluster},storage:{storage},full:{full}")
           PY

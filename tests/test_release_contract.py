@@ -57,6 +57,8 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertEqual(workflows["test.yml"].count(setup_python_pin), 2)
         self.assertIn("qualification", workflows["test.yml"])
         self.assertIn("classify test impact", workflows["test.yml"])
+        self.assertIn(r'output.write(f"{key}={str(value).lower()}\n")', workflows["test.yml"])
+        self.assertNotIn(r'output.write(f"{key}={str(value).lower()}\\n")', workflows["test.yml"])
 
     def test_canonical_english_wiki_pages_and_community_readme_exist(self):
         wiki = ROOT / "docs" / "wiki"
