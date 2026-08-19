@@ -1,0 +1,161 @@
+name: qualification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run every qualification suite
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: failovarr-qualification-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: classify test impact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      package: ${{ steps.impact.outputs.package }}
+      cluster: ${{ steps.impact.outputs.cluster }}
+      storage: ${{ steps.impact.outputs.storage }}
+      full: ${{ steps.impact.outputs.full }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: impact
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          FORCE_FULL: ${{ inputs.full }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+
+          manual_full = os.environ["EVENT_NAME"] == "workflow_dispatch" and os.environ.get("FORCE_FULL", "true") == "true"
+          if manual_full:
+              changed = ["manual full qualification"]
+          else:
+              base = os.environ.get("BASE_SHA")
+              changed = subprocess.check_output(["git", "diff", "--name-only", f"{base}...HEAD"], text=True).splitlines()
+
+          full = manual_full or any(path.startswith(".github/workflows/") or path.startswith("tools/ci/") or path.startswith("tests/") for path in changed)
+          runtime = any(path.startswith("failovarr/") for path in changed)
+          storage_change = any(any(token in path.lower() for token in ("storage", "vendor", "remote_storage")) for path in changed)
+          cluster_change = any(any(token in path.lower() for token in ("engine", "autostart", "domains", "transport", "vip", "planner", "client_identity", "integration_probe", "ci-cluster")) for path in changed)
+          package = full or runtime or any(path in {"requirements-vendor.txt", "tools/build_release.ps1"} for path in changed)
+          cluster = full or cluster_change
+          storage = full or storage_change
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              for key, value in {"package": package, "cluster": cluster, "storage": storage, "full": full}.items():
+                  output.write(f"{key}={str(value).lower()}\\n")
+          print("FAILOVARR_CI_CHANGED=" + ",".join(changed))
+          print(f"FAILOVARR_CI_SELECTION=package:{package},cluster:{cluster},storage:{storage},full:{full}")
+          PY
+      - name: Verify pull request test-impact declaration
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          for required in "Affected feature IDs:" "Behaviour changed:" "Required test environments:" "Coverage matrix reviewed:" "Tests added, removed, or intentionally unchanged:"; do
+            grep -Fq "$required" <<<"$body" || { echo "Missing required Test Impact entry: $required" >&2; exit 1; }
+          done
+      - name: Write selection summary
+        run: |
+          {
+            echo "### Failovarr qualification selection"
+            echo "- Package: ${{ steps.impact.outputs.package }}"
+            echo "- Synthetic cluster: ${{ steps.impact.outputs.cluster }}"
+            echo "- Synthetic storage: ${{ steps.impact.outputs.storage }}"
+            echo "- Full qualification: ${{ steps.impact.outputs.full }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  docs:
+    name: repository contract
+    needs: classify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python tools/validate_repository_contract.py
+
+  package:
+    name: package
+    needs: classify
+    if: needs.classify.outputs.package == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m compileall -q failovarr tests
+      - run: python -m unittest discover -s tests -v
+      - run: pwsh -NoProfile -File tools/build_release.ps1
+
+  cluster:
+    name: synthetic cluster
+    needs: classify
+    if: needs.classify.outputs.cluster == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pwsh -NoProfile -File tools/ci/run_cluster.ps1
+
+  storage:
+    name: synthetic storage
+    needs: classify
+    if: needs.classify.outputs.storage == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pwsh -NoProfile -File tools/ci/run_storage.ps1
+
+  qualification:
+    name: qualification
+    if: always()
+    needs: [classify, docs, package, cluster, storage]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Aggregate relevant suites
+        env:
+          CLASSIFY: ${{ needs.classify.result }}
+          DOCS: ${{ needs.docs.result }}
+          PACKAGE: ${{ needs.package.result }}
+          CLUSTER: ${{ needs.cluster.result }}
+          STORAGE: ${{ needs.storage.result }}
+        run: |
+          test "$CLASSIFY" = success
+          test "$DOCS" = success
+          for result in "$PACKAGE" "$CLUSTER" "$STORAGE"; do
+            test "$result" = success || test "$result" = skipped
+          done

@@ -1,0 +1,79 @@
+# Canonical feature catalogue. Status values are mutually exclusive.
+
+[[feature]]
+id = "CORE-001"
+title = "Signed, replay-protected configuration bundles"
+status = "implemented_verified"
+evidence = "0.6.17 qualification: package, synthetic cluster and all storage backends"
+
+[[feature]]
+id = "CORE-002"
+title = "Full Main export with Follower-local import scope and protected records"
+status = "implemented_verified"
+evidence = "0.6.17 qualification synthetic cluster"
+
+[[feature]]
+id = "CORE-003"
+title = "Stable IDs, dry-run planning, transactional apply and deletion safety"
+status = "implemented_verified"
+evidence = "0.6.17 qualification synthetic cluster"
+
+[[feature]]
+id = "UX-001"
+title = "Setup Assistant and native non-secret Plugin Settings"
+status = "implemented_verified"
+evidence = "0.6.17 qualification package and synthetic storage"
+
+[[feature]]
+id = "TRANSPORT-001"
+title = "Direct Pull, readiness and shared-storage transport"
+status = "implemented_verified"
+evidence = "0.6.17 qualification synthetic cluster"
+
+[[feature]]
+id = "STORAGE-001"
+title = "Filesystem, WebDAV, S3, SFTP and SMB backends"
+status = "implemented_verified"
+evidence = "0.6.17 qualification synthetic storage"
+
+[[feature]]
+id = "HANDOFF-001"
+title = "Planned online handoff and plugin-managed Linux VIP"
+status = "implemented_incomplete"
+evidence = "Synthetic and operator lab evidence exists; no witness/fencing proof"
+
+[[feature]]
+id = "RECOVERY-001"
+title = "Production-like initialization and restore workflow"
+status = "implemented_incomplete"
+evidence = "No complete independent restore/rollback acceptance proof"
+
+[[feature]]
+id = "HA-001"
+title = "Witness/fencing and safe automatic promotion"
+status = "planned"
+evidence = "Required before automatic failover claims"
+
+[[feature]]
+id = "SEC-001"
+title = "Encrypted bundle payloads"
+status = "planned"
+evidence = "HMAC authenticates data; it does not encrypt it"
+
+[[feature]]
+id = "OPS-001"
+title = "Celery execution for large exports and imports"
+status = "planned"
+evidence = "Current plugin keeps work bounded but does not distribute it to Celery"
+
+[[feature]]
+id = "OPS-002"
+title = "Plugin-code distribution and version coordination"
+status = "planned"
+evidence = "Plugins remain independently installed and updated"
+
+[[feature]]
+id = "RECOVERY-002"
+title = "Full restore, promotion and rollback acceptance suite"
+status = "planned"
+evidence = "Needed before a stable production recommendation"
