@@ -1,0 +1,20 @@
+# Contributing to Failovarr
+
+Failovarr is an AI-assisted vibe coding project under human direction. Please
+keep contributions reviewable, document assumptions, and do not add real
+deployment data or secrets.
+
+Every pull request must complete the Test Impact section from the template:
+affected feature IDs, behaviour change, required environments, coverage-matrix
+decision, and test additions/removals or the reason none are needed.
+
+The classifier selects lightweight checks for documentation-only changes and
+the relevant synthetic suites for runtime, cluster and storage changes.
+Release candidates always run the complete qualification set on their exact
+commit. Local production-like lab testing is operator-controlled and is not
+part of public CI.
+
+Use Python standard-library unit tests where possible. Synthetic CI fixtures
+must be invented data only. Do not make a feature "Implemented and verified"
+until its CI and, where required, manual acceptance evidence is recorded in
+the feature catalogue.
