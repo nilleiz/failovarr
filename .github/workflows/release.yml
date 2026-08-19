@@ -70,9 +70,13 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "GitHub API request failed: gh api $($Arguments -join ' ')" }
             return (($raw -join "`n") | ConvertFrom-Json)
           }
+          $releaseTitle = "Failovarr $env:VERSION"
           $releases = @(Invoke-GhJson @("repos/$env:GITHUB_REPOSITORY/releases?per_page=100"))
-          $matches = @($releases | Where-Object { $_.tag_name -eq $env:TAG })
-          if ($matches.Count -gt 1) { throw "More than one release uses tag $env:TAG" }
+          $matches = @($releases | Where-Object {
+            $_.tag_name -eq $env:TAG -or
+            ($_.draft -and $_.name -eq $releaseTitle -and $_.tag_name -like "untagged-*")
+          })
+          if ($matches.Count -gt 1) { throw "More than one draft release matches $releaseTitle" }
           if ($matches.Count -eq 1) {
             $release = $matches[0]
             if (-not $release.draft) { throw "Release $env:TAG already exists and is published" }
@@ -93,7 +97,11 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not create draft release $env:TAG" }
             $release = (($raw -join "`n") | ConvertFrom-Json)
           }
-          if (-not $release.draft -or $release.tag_name -ne $env:TAG) { throw "Release draft identity is invalid" }
+          if (
+            -not $release.draft -or
+            $release.name -ne $releaseTitle -or
+            ($release.tag_name -ne $env:TAG -and $release.tag_name -notlike "untagged-*")
+          ) { throw "Release draft identity is invalid" }
           "RELEASE_ID=$($release.id)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Upload and verify release assets
         shell: pwsh
@@ -140,7 +148,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_KIND: ${{ inputs.release_kind }}
         run: |
-          $payload = @{ draft = $false; prerelease = ($env:RELEASE_KIND -eq 'prerelease') } | ConvertTo-Json -Compress
+          $payload = @{
+            tag_name = $env:TAG
+            target_commitish = $env:GITHUB_SHA
+            draft = $false
+            prerelease = ($env:RELEASE_KIND -eq 'prerelease')
+          } | ConvertTo-Json -Compress
           $raw = $payload | & gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/$env:RELEASE_ID" --input -
           if ($LASTEXITCODE -ne 0) { throw "Could not publish release $env:TAG" }
           $release = (($raw -join "`n") | ConvertFrom-Json)
