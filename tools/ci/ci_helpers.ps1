@@ -80,6 +80,16 @@ function Install-CiPlugin {
     Invoke-CiDocker exec $ContainerId chown -R dispatch:dispatch /data/plugins/failovarr
 }
 
+function Prepare-CiLegacyMigrationConfig {
+    param([string]$ContainerId)
+
+    # Seed a legacy 0.6.x-style file as the unprivileged Dispatcharr user.
+    # The following ZIP install/discovery intentionally executes as root.
+    $seedCommand = 'umask 077; printf ''%s\n'' ''{"node_id":"legacy-slave","role":"follower","state_path":"/data/legacy-state"}'' > /data/dispatcharr-redundancy-config.json'
+    Invoke-CiDocker exec -u dispatch $ContainerId sh -lc `
+        $seedCommand
+}
+
 function Prepare-CiPluginStorage {
     param([string]$ContainerId)
 

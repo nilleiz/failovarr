@@ -42,11 +42,13 @@ try {
     Wait-CiDispatcharrReady $main
     Wait-CiDispatcharrReady $slave
     Install-CiPlugin $main $archive
+    Prepare-CiLegacyMigrationConfig $slave
     Install-CiPlugin $slave $archive
     Prepare-CiPluginStorage $main
     Prepare-CiPluginStorage $slave
     Invoke-CiDocker cp $probeFile "${main}:/tmp/integration_probe.py"
     Invoke-CiDocker cp $probeFile "${slave}:/tmp/integration_probe.py"
+    Invoke-Probe $slave "legacy_config_migration_verify"
 
     # Autostart must be won by a durable uWSGI worker, never a short-lived
     # Celery child. Restart the real synthetic containers and wait beyond the

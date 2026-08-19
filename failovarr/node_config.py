@@ -39,12 +39,32 @@ def load_node_config(fallback: Mapping[str, Any] | None = None) -> dict[str, Any
     # overwrite either an explicit Failovarr configuration or the source file.
     if LEGACY_CONFIG_PATH != CONFIG_PATH and LEGACY_CONFIG_PATH.exists():
         legacy = _read_config(LEGACY_CONFIG_PATH)
-        save_node_config(legacy)
+        save_node_config(legacy, ownership_source=LEGACY_CONFIG_PATH)
         return legacy
     return dict(fallback or {})
 
 
-def save_node_config(value: Mapping[str, Any]) -> None:
+def _ownership_for_write(ownership_source: Path | None = None) -> tuple[int, int] | None:
+    """Preserve a readable node-local owner across an atomic replacement.
+
+    Dispatcharr's ZIP importer can discover a plugin as root, while the web
+    workers subsequently run as ``dispatch``. Prefer the existing Failovarr
+    file, then a one-time migration source; a fresh file remains owned by the
+    process that creates it.
+    """
+    for candidate in (CONFIG_PATH, ownership_source):
+        if candidate is None:
+            continue
+        try:
+            metadata = candidate.stat()
+        except FileNotFoundError:
+            continue
+        return metadata.st_uid, metadata.st_gid
+    return None
+
+
+def save_node_config(value: Mapping[str, Any], *, ownership_source: Path | None = None) -> None:
+    owner = _ownership_for_write(ownership_source)
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
         prefix=f".{CONFIG_PATH.name}.", suffix=".tmp", dir=CONFIG_PATH.parent,
@@ -52,6 +72,8 @@ def save_node_config(value: Mapping[str, Any]) -> None:
     try:
         if hasattr(os, "fchmod"):
             os.fchmod(descriptor, 0o600)
+        if owner is not None and hasattr(os, "fchown"):
+            os.fchown(descriptor, owner[0], owner[1])
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             descriptor = -1
             json.dump(dict(value), handle, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

@@ -411,6 +411,30 @@ if ACTION == "inspect":
         "profiles": list(OutputProfile.objects.order_by("id").values("id", "name")),
     })
 
+elif ACTION == "legacy_config_migration_verify":
+    # Install-CiPlugin discovered Failovarr as root after the helper wrote a
+    # dispatch-owned legacy file. This probe runs as dispatch and proves both
+    # the migrated file ownership and the real Assistant action remain usable.
+    metadata = CONFIG_PATH.stat()
+    dispatch_user = pwd.getpwnam("dispatch")
+    manager = PluginManager()
+    manager.discover_plugins(sync_db=True, force_reload=False, use_cache=False)
+    result = manager.run_action(PLUGIN_KEY, "start_setup_assistant")
+    probe = {
+        "owner": metadata.st_uid,
+        "group": metadata.st_gid,
+        "mode": oct(metadata.st_mode & 0o777),
+        "assistant": result.get("status"),
+        "legacy_present": Path("/data/dispatcharr-redundancy-config.json").exists(),
+    }
+    emit(probe, all((
+        probe["owner"] == dispatch_user.pw_uid,
+        probe["group"] == dispatch_user.pw_gid,
+        probe["mode"] == "0o600",
+        probe["assistant"] == "success",
+        probe["legacy_present"],
+    )))
+
 elif ACTION == "prepare_main":
     reset_handoff_state("leader", full_lab_reset=True)
     OutputProfile.objects.update_or_create(

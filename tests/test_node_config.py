@@ -43,6 +43,31 @@ class NodeConfigTests(unittest.TestCase):
             self.assertTrue(current.exists())
             self.assertTrue(legacy.exists())
 
+    def test_legacy_migration_copies_legacy_file_owner_to_atomic_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = Path(directory) / "failovarr.json"
+            legacy = Path(directory) / "dispatcharr-redundancy.json"
+            legacy.write_text('{"node_id":"migrated"}\n', encoding="utf-8")
+            expected = legacy.stat()
+            with patch("failovarr.node_config.CONFIG_PATH", current), patch(
+                "failovarr.node_config.LEGACY_CONFIG_PATH", legacy,
+            ), patch("failovarr.node_config.os.fchown") as chown:
+                load_node_config()
+            self.assertEqual(chown.call_count, 1)
+            self.assertEqual(chown.call_args.args[1:], (expected.st_uid, expected.st_gid))
+
+    def test_existing_failovarr_owner_is_preserved_on_atomic_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = Path(directory) / "failovarr.json"
+            current.write_text('{"node_id":"existing"}\n', encoding="utf-8")
+            expected = current.stat()
+            with patch("failovarr.node_config.CONFIG_PATH", current), patch(
+                "failovarr.node_config.os.fchown",
+            ) as chown:
+                save_node_config({"node_id": "updated"})
+            self.assertEqual(chown.call_count, 1)
+            self.assertEqual(chown.call_args.args[1:], (expected.st_uid, expected.st_gid))
+
     def test_empty_secret_input_preserves_existing_values(self):
         merged = _merge_secret_fields(
             {"shared_secret": "", "setup_access_token": ""},
