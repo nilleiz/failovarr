@@ -1,0 +1,30 @@
+name: Bug report
+description: Report reproducible Failovarr behaviour with sanitized data only
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include credentials, bundles, real hostnames, IPs, backups or provider URLs."
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Observed behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Sanitized reproduction
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Failovarr and Dispatcharr version

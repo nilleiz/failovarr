@@ -1,0 +1,39 @@
+name: failovarr-ci-cluster
+
+x-dispatcharr: &dispatcharr
+  image: ghcr.io/dispatcharr/dispatcharr@sha256:df768adcb9993b58f5e67010cc802c8659b7f964cb1213ab7ff9bb9384db9145
+  environment:
+    DISPATCHARR_ENV: aio
+    REDIS_HOST: localhost
+    CELERY_BROKER_URL: redis://localhost:6379/0
+    DISPATCHARR_LOG_LEVEL: info
+    PYTHONDONTWRITEBYTECODE: "1"
+  restart: "no"
+  networks:
+    ci:
+
+services:
+  main:
+    <<: *dispatcharr
+    volumes:
+      - main_data:/data
+      - shared_data:/data/redundancy
+      - main_state:/data/failovarr-state
+
+  slave:
+    <<: *dispatcharr
+    volumes:
+      - slave_data:/data
+      - shared_data:/data/redundancy
+      - slave_state:/data/failovarr-state
+
+networks:
+  ci:
+    internal: true
+
+volumes:
+  main_data:
+  slave_data:
+  shared_data:
+  main_state:
+  slave_state:

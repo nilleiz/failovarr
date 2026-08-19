@@ -1,0 +1,12 @@
+{
+  "name": "Failovarr",
+  "version": "0.7.0",
+  "description": "Development Preview: signed active/passive Dispatcharr configuration replication with node-local overrides",
+  "license": "MIT",
+  "author": "nilleiz",
+  "min_dispatcharr_version": "v0.29.0",
+  "repo_url": "https://github.com/nilleiz/failovarr",
+  "source_type": "external",
+  "source_url": "https://github.com/nilleiz/failovarr/releases/download/v{version}/failovarr-{version}.zip",
+  "help_url": "https://github.com/nilleiz/failovarr/wiki"
+}

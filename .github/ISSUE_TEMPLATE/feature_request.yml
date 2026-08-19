@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a scoped Failovarr capability
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour and safety implications
+    validations:
+      required: true
+  - type: textarea
+    id: test_impact
+    attributes:
+      label: Expected test impact
+      description: Mention affected feature IDs and synthetic/lab test needs.

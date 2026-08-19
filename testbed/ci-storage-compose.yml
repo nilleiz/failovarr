@@ -1,0 +1,77 @@
+name: failovarr-ci-storage
+
+services:
+  node:
+    image: ghcr.io/dispatcharr/dispatcharr@sha256:df768adcb9993b58f5e67010cc802c8659b7f964cb1213ab7ff9bb9384db9145
+    environment:
+      DISPATCHARR_ENV: aio
+      REDIS_HOST: localhost
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      DISPATCHARR_LOG_LEVEL: info
+      PYTHONDONTWRITEBYTECODE: "1"
+    restart: "no"
+    volumes:
+      - node_data:/data
+      - shared_data:/data/redundancy
+      - node_state:/data/failovarr-state
+    networks: [ci]
+
+  webdav:
+    image: rclone/rclone@sha256:b06aed988cf5967de7c25be5925240983981c757f4ed1ac9d2fa659d51d60548
+    command: ["serve", "webdav", "/data", "--addr", ":8080", "--user", "lab", "--pass", "lab-webdav-password"]
+    volumes:
+      - webdav_data:/data
+    networks:
+      ci:
+        aliases: [storage-webdav]
+
+  s3:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: lab-access-key
+      MINIO_ROOT_PASSWORD: lab-secret-key-32-characters
+    volumes:
+      - s3_data:/data
+    networks:
+      ci:
+        aliases: [storage-s3]
+
+  sftp:
+    image: atmoz/sftp@sha256:81fa92512bf8ead4849f33c1c153907b86d32d77704d1c62a9c70b4316ae9e50
+    command: "lab:lab-sftp-password:1001:1001:upload"
+    networks:
+      ci:
+        aliases: [storage-sftp]
+
+  smb:
+    image: dperson/samba@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869
+    healthcheck:
+      disable: true
+    command:
+      - "-p"
+      - "-u"
+      - "lab;lab-smb-password"
+      - "-s"
+      - "redundancy;/share;yes;no;no;lab"
+      - "-g"
+      - "server min protocol = SMB3"
+      - "-g"
+      - "smb encrypt = required"
+    volumes:
+      - smb_data:/share
+    networks:
+      ci:
+        aliases: [storage-smb]
+
+networks:
+  ci:
+    internal: true
+
+volumes:
+  node_data:
+  node_state:
+  shared_data:
+  webdav_data:
+  s3_data:
+  smb_data:

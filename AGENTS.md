@@ -19,5 +19,7 @@ poll CI. Evaluate repeated deterministic work for an idempotent script.
 
 Unit and synthetic integration tests run in GitHub Actions only. Do not run
 local Docker or production-like test environments unless an operator explicitly
-does so and supplies the result for analysis. Release candidates require the
-full qualification set on the exact release commit.
+does so and supplies the result for analysis. An unreleased Draft-PR keeps its
+planned semantic version through CI corrections; increment it only for a new
+release candidate, after publication, or on explicit user direction. Release
+candidates require the full qualification set on the exact release commit.
