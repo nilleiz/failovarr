@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: failovarr-release
+  cancel-in-progress: false
+
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'
@@ -113,8 +117,25 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "GitHub API request failed: gh api $($Arguments -join ' ')" }
             return (($raw -join "`n") | ConvertFrom-Json)
           }
+          function Remove-ReleaseAsset([long]$AssetId, [string]$Name) {
+            & gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/releases/assets/$AssetId"
+            if ($LASTEXITCODE -ne 0) { throw "Could not remove release asset: $Name" }
+          }
+          function Rename-ReleaseAsset([long]$AssetId, [string]$Name) {
+            $payload = @{ name = $Name } | ConvertTo-Json -Compress
+            $raw = $payload | & gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/assets/$AssetId" --input -
+            if ($LASTEXITCODE -ne 0) { throw "Could not finalize release asset: $Name" }
+            return (($raw -join "`n") | ConvertFrom-Json)
+          }
           $release = Invoke-GhJson @("repos/$env:GITHUB_REPOSITORY/releases/$env:RELEASE_ID")
           if (-not $release.draft) { throw "Release must stay unpublished until assets are verified" }
+          $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
+          if ($uploadBase -notlike 'https://uploads.github.com/*') { throw "Release upload URL is invalid" }
+          $uploadHeaders = @{
+            Accept = 'application/vnd.github+json'
+            Authorization = "Bearer $env:GH_TOKEN"
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
           $assets = @(
             @{ Path = "dist/failovarr-$env:VERSION.zip"; ContentType = "application/zip" },
             @{ Path = "dist/failovarr-$env:VERSION.zip.sha256"; ContentType = "text/plain" }
@@ -124,15 +145,27 @@ jobs:
             $digest = "sha256:" + (Get-FileHash -Algorithm SHA256 $asset.Path).Hash.ToLowerInvariant()
             $existing = @($release.assets | Where-Object { $_.name -eq $name })
             if ($existing.Count -gt 1) { throw "Duplicate draft asset: $name" }
-            if ($existing.Count -eq 1 -and $existing[0].digest -ne $digest) {
-              & gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/releases/assets/$($existing[0].id)"
-              if ($LASTEXITCODE -ne 0) { throw "Could not replace stale draft asset: $name" }
-              $existing = @()
+            if ($existing.Count -eq 1 -and $existing[0].digest -eq $digest) {
+              continue
             }
-            if ($existing.Count -eq 0) {
-              $encodedName = [uri]::EscapeDataString($name)
-              & gh api --hostname uploads.github.com --method POST -H "Content-Type: $($asset.ContentType)" "repos/$env:GITHUB_REPOSITORY/releases/$env:RELEASE_ID/assets?name=$encodedName" --input $asset.Path
-              if ($LASTEXITCODE -ne 0) { throw "Could not upload release asset: $name" }
+            $stagedName = "$name.upload-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+            $uploadUri = "${uploadBase}?name=$([uri]::EscapeDataString($stagedName))"
+            try {
+              $uploaded = Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $uploadHeaders -ContentType $asset.ContentType -InFile $asset.Path
+            } catch {
+              throw "Could not upload staged release asset: $name ($($_.Exception.Message))"
+            }
+            $staged = Invoke-GhJson @("repos/$env:GITHUB_REPOSITORY/releases/assets/$($uploaded.id)")
+            if ($staged.name -ne $stagedName -or $staged.digest -ne $digest) {
+              Remove-ReleaseAsset $staged.id $stagedName
+              throw "Staged release asset failed digest verification: $name"
+            }
+            if ($existing.Count -eq 1) {
+              Remove-ReleaseAsset $existing[0].id $name
+            }
+            $finalized = Rename-ReleaseAsset $staged.id $name
+            if ($finalized.name -ne $name -or $finalized.digest -ne $digest) {
+              throw "Finalized release asset failed verification: $name"
             }
           }
           $release = Invoke-GhJson @("repos/$env:GITHUB_REPOSITORY/releases/$env:RELEASE_ID")
@@ -141,6 +174,10 @@ jobs:
             $digest = "sha256:" + (Get-FileHash -Algorithm SHA256 $asset.Path).Hash.ToLowerInvariant()
             $verified = @($release.assets | Where-Object { $_.name -eq $name -and $_.digest -eq $digest })
             if ($verified.Count -ne 1) { throw "Verified release asset is missing or changed: $name" }
+          }
+          $stagedAssets = @($release.assets | Where-Object { $_.name -like '*.upload-*' })
+          foreach ($staged in $stagedAssets) {
+            Remove-ReleaseAsset $staged.id $staged.name
           }
       - name: Publish verified release
         shell: pwsh
