@@ -28,13 +28,16 @@ class ReleaseContractTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         for contract in (
             "workflow_dispatch:", "github.ref == 'refs/heads/main'", "contents: write",
-            "tools/build_release.ps1", "--draft", "gh release upload",
-            ".zip.sha256", "Upload and verify release assets", "Publish verified release",
+            "tools/build_release.ps1", "RELEASE_ID=", "uploads.github.com",
+            "Get-FileHash", "Invoke-WebRequest", ".zip.sha256",
+            "Upload and verify release assets", "Publish verified release",
         ):
             self.assertIn(contract, workflow)
         self.assertIn("git/matching-refs/tags/$tag", workflow)
         self.assertIn('"refs/tags/$tag"', workflow)
         self.assertNotIn("git/ref/tags/$tag", workflow)
+        self.assertNotIn("gh release upload", workflow)
+        self.assertNotIn("releases/tags/$env:TAG", workflow)
 
     def test_workflows_use_node24_actions_and_quote_markdown_summaries_safely(self):
         checkout_pin = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
