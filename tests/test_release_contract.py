@@ -28,8 +28,9 @@ class ReleaseContractTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         for contract in (
             "workflow_dispatch:", "github.ref == 'refs/heads/main'", "contents: write",
-            "tools/build_release.ps1", "RELEASE_ID=", "uploads.github.com",
-            "Get-FileHash", "Invoke-WebRequest", ".zip.sha256",
+            "tools/build_release.ps1", "RELEASE_ID=", "upload_url",
+            "Invoke-RestMethod", "-InFile", "Get-FileHash", "Invoke-WebRequest",
+            ".upload-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT", ".zip.sha256",
             "Upload and verify release assets", "Publish verified release",
         ):
             self.assertIn(contract, workflow)
@@ -40,7 +41,11 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn('target_commitish = $env:GITHUB_SHA', workflow)
         self.assertNotIn("git/ref/tags/$tag", workflow)
         self.assertNotIn("gh release upload", workflow)
+        self.assertNotIn("--hostname uploads.github.com", workflow)
         self.assertNotIn("releases/tags/$env:TAG", workflow)
+        self.assertLess(workflow.index("Invoke-RestMethod"), workflow.index("Remove-ReleaseAsset $existing[0].id"))
+        self.assertIn("group: failovarr-release", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
 
     def test_workflows_use_node24_actions_and_quote_markdown_summaries_safely(self):
         checkout_pin = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
