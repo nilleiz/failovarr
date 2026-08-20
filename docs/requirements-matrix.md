@@ -9,6 +9,7 @@
 | P701-05 | A verified tagged pre-release can become stable without changing its assets or tag. | The release workflow verifies the existing pre-release and promotes it in place only after the explicit stable request. | Release-workflow contract coverage and operator-approved promotion after lab acceptance. | implemented; CI pending |
 | P701-06 | Canonical Wiki pages can be published without a repository secret or a failing Actions workflow. | Replace the unusable GitHub-token workflow with an idempotent maintainer-run publisher that uses the existing local GitHub CLI login and preserves unmanaged Wiki pages. | Static publisher contract and operator-confirmed public Wiki synchronization. | implemented; CI pending |
 | P701-07 | A clean Git checkout is accepted by the local Wiki publisher. | Handle Git's empty `status --porcelain` output before checking for local modifications. | Publisher contract regression and operator-confirmed Wiki synchronization. | implemented; CI pending |
+| P701-08 | Published Wiki navigation opens rendered Wiki pages rather than raw Markdown files. | Use extension-free Wiki slugs for internal links and a GitHub blob URL for the repository feature catalogue; reject relative Markdown-file links in the contract test. | Wiki-link contract and operator-confirmed rendered navigation. | implemented; CI pending |
 
 # 0.7.0 public product extraction gate
 

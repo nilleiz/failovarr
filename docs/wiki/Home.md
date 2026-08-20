@@ -18,17 +18,17 @@ local on a Follower under the same ID.
 
 ## Start here
 
-1. [Getting Started](Getting-Started.md) — install and configure Main and Follower.
-2. [Settings Walkthrough](Settings-Walkthrough.md) — every Assistant and native
+1. [Getting Started](Getting-Started) — install and configure Main and Follower.
+2. [Settings Walkthrough](Settings-Walkthrough) — every Assistant and native
    Plugin Settings field.
-3. [First Sync and Initialization](First-Sync-and-Initialization.md) — preview,
+3. [First Sync and Initialization](First-Sync-and-Initialization) — preview,
    import and the one-time initializer.
-4. [Operations and Planned Handoff](Operations-and-Planned-Handoff.md) — daily
+4. [Operations and Planned Handoff](Operations-and-Planned-Handoff) — daily
    operation, Cold Standby and returning nodes.
-5. [Feature Status](Features.md) — verified, incomplete and planned work.
+5. [Feature Status](Features) — verified, incomplete and planned work.
 
-For network choices see [Deployment Modes](Deployment-Modes.md); for supported
-destinations see [Storage Backends](Storage-Backends.md).
+For network choices see [Deployment Modes](Deployment-Modes); for supported
+destinations see [Storage Backends](Storage-Backends).
 
 ## Core safety rules
 
@@ -39,5 +39,5 @@ destinations see [Storage Backends](Storage-Backends.md).
   local import selection, deletion policy and record protection.
 - Verify every Preview before the first Import or Initialization.
 
-See [Security and Limitations](Security-and-Limitations.md) for the exact trust
-boundaries and [Troubleshooting](Troubleshooting.md) for common recovery steps.
+See [Security and Limitations](Security-and-Limitations) for the exact trust
+boundaries and [Troubleshooting](Troubleshooting) for common recovery steps.

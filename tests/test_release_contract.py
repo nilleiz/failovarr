@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -95,6 +96,17 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("docs/wiki/Getting-Started.md", readme)
         self.assertIn("Work in Progress", readme)
         self.assertIn("AI-assisted vibe coding", readme)
+
+    def test_wiki_links_use_rendered_page_slugs(self):
+        wiki = ROOT / "docs" / "wiki"
+        page_slugs = {path.stem for path in wiki.glob("*.md")}
+        for page in wiki.glob("*.md"):
+            for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", page.read_text(encoding="utf-8")):
+                if target.startswith(("https://", "http://", "#", "mailto:")):
+                    continue
+                target_slug = target.split("#", 1)[0]
+                self.assertFalse(target_slug.endswith(".md"), f"{page.name}: {target}")
+                self.assertIn(target_slug, page_slugs, f"{page.name}: {target}")
 
     def test_wiki_publisher_uses_local_gh_auth_without_stored_secrets(self):
         publisher = (ROOT / "tools" / "publish_wiki.ps1").read_text(encoding="utf-8")
