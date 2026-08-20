@@ -104,6 +104,8 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("$managedPages", publisher)
         self.assertIn("git diff --quiet", publisher)
         self.assertIn("GIT_CONFIG_VALUE_0", publisher)
+        self.assertIn("$workingTree", publisher)
+        self.assertIn("$null -ne $workingTree", publisher)
         self.assertNotIn("WIKI_TOKEN", publisher)
         self.assertNotIn("secrets.", publisher)
         self.assertFalse((ROOT / ".github" / "workflows" / "sync-wiki.yml").exists())
