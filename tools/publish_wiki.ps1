@@ -47,11 +47,12 @@ try {
     if ($LASTEXITCODE -ne 0 -or $branch -ne "main") {
         throw "Wiki publication requires a clean checkout on main."
     }
-    if ((& git status --porcelain).Trim()) {
-        throw "Wiki publication requires a clean checkout."
-    }
+    $workingTree = & git status --porcelain
     if ($LASTEXITCODE -ne 0) {
         throw "Could not read the Git working-tree status."
+    }
+    if ($null -ne $workingTree -and $workingTree.Trim()) {
+        throw "Wiki publication requires a clean checkout."
     }
 
     Invoke-Checked git @("fetch", "origin", "main", "--quiet")
