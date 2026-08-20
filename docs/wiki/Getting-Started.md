@@ -62,4 +62,4 @@ setup port.
    Profiles retain their local hardware command.
 
 If a separately created Follower has many identity conflicts, continue with
-[First Sync and Initialization](First-Sync-and-Initialization.md).
+[First Sync and Initialization](First-Sync-and-Initialization).

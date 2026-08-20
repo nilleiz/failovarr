@@ -24,5 +24,5 @@
 - OPS-002 — Plugin-code distribution/version coordination.
 - RECOVERY-002 — Full restore, promotion and rollback acceptance suite.
 
-See the canonical repository [feature catalogue](../docs/FEATURES.md) for
+See the canonical repository [feature catalogue](https://github.com/nilleiz/failovarr/blob/main/docs/FEATURES.md) for
 evidence and contribution rules.
