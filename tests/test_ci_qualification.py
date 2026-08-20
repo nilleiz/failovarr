@@ -23,6 +23,7 @@ verifier = load_module("ci_verifier", "tools/ci/verify_release_qualification.py"
 class ChangeClassifierTests(unittest.TestCase):
     def test_docs_only_skips_runtime_suites(self):
         self.assertEqual(classifier.classify(["docs/wiki/Home.md"], event="pull_request", force_full="false"), classifier.Selection(False, False, False, False))
+        self.assertEqual(classifier.classify(["tools/publish_wiki.ps1"], event="pull_request", force_full="false"), classifier.Selection(False, False, False, False))
 
     def test_release_workflow_and_unit_tests_need_package_only(self):
         self.assertEqual(classifier.classify([".github/workflows/release.yml"], event="pull_request", force_full="false"), classifier.Selection(True, False, False, False))

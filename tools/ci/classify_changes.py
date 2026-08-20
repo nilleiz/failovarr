@@ -17,7 +17,10 @@ class Selection:
 
 
 DOC_PREFIXES = ("docs/", ".github/ISSUE_TEMPLATE/")
-DOC_FILES = {"README.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "AGENTS.md", ".github/PULL_REQUEST_TEMPLATE.md"}
+DOC_FILES = {
+    "README.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "AGENTS.md",
+    ".github/PULL_REQUEST_TEMPLATE.md", "tools/publish_wiki.ps1",
+}
 TEST_INFRA = {".github/workflows/test.yml", "tools/ci/classify_changes.py", "tools/ci/verify_release_qualification.py"}
 RELEASE_PACKAGE = {".github/workflows/release.yml", "tools/build_release.ps1", "requirements-vendor.txt"}
 CI_HELPERS = {"tools/ci/ci_helpers.ps1"}

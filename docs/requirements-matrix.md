@@ -7,6 +7,7 @@
 | P701-03 | Existing 0.7.0 bundles and configuration profiles remain compatible. | Keep bundle/profile schemas unchanged; retain initializer ID replacement semantics. | Package and synthetic-cluster qualification on a 0.7.1 candidate. | implemented; CI pending |
 | P701-04 | Every approved public change has an auditable Draft-PR and operator-gated CI lifecycle. | Record the mandatory branch, push, Draft-PR, CI-review, fix-plan and full-qualification sequence in public agent guidance. | Public instruction review and the 0.7.1 Draft-PR lifecycle. | implemented; CI pending |
 | P701-05 | A verified tagged pre-release can become stable without changing its assets or tag. | The release workflow verifies the existing pre-release and promotes it in place only after the explicit stable request. | Release-workflow contract coverage and operator-approved promotion after lab acceptance. | implemented; CI pending |
+| P701-06 | Canonical Wiki pages can be published without a repository secret or a failing Actions workflow. | Replace the unusable GitHub-token workflow with an idempotent maintainer-run publisher that uses the existing local GitHub CLI login and preserves unmanaged Wiki pages. | Static publisher contract and operator-confirmed public Wiki synchronization. | implemented; CI pending |
 
 # 0.7.0 public product extraction gate
 

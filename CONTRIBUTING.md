@@ -20,3 +20,18 @@ Use Python standard-library unit tests where possible. Synthetic CI fixtures
 must be invented data only. Do not make a feature "Implemented and verified"
 until its CI and, where required, manual acceptance evidence is recorded in
 the feature catalogue.
+
+## Wiki maintenance
+
+`docs/wiki/` is the canonical source for the public GitHub Wiki. After a
+Wiki-source change has merged to `main`, a maintainer publishes it from a
+clean, up-to-date checkout with:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/publish_wiki.ps1
+```
+
+This is deliberately maintainer-run: GitHub Actions cannot authenticate to a
+separate Wiki Git repository with the repository `GITHUB_TOKEN`. The script
+uses the maintainer's existing GitHub CLI login, stores no token, and leaves
+unmanaged Wiki pages untouched.
