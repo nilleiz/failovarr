@@ -76,10 +76,9 @@ class ReleaseContractTests(unittest.TestCase):
         for content in workflows.values():
             self.assertNotIn(old_checkout_pin, content)
             self.assertNotIn(old_python_pin, content)
-        for name in ("release.yml", "sync-wiki.yml", "test.yml"):
+        for name in ("release.yml", "test.yml"):
             self.assertIn(checkout_pin, workflows[name])
         self.assertEqual(workflows["release.yml"].count(checkout_pin), 1)
-        self.assertEqual(workflows["sync-wiki.yml"].count(checkout_pin), 1)
         self.assertEqual(workflows["test.yml"].count(checkout_pin), 5)
         self.assertIn(setup_python_pin, workflows["test.yml"])
         self.assertEqual(workflows["test.yml"].count(setup_python_pin), 2)
@@ -96,6 +95,20 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("docs/wiki/Getting-Started.md", readme)
         self.assertIn("Work in Progress", readme)
         self.assertIn("AI-assisted vibe coding", readme)
+
+    def test_wiki_publisher_uses_local_gh_auth_without_stored_secrets(self):
+        publisher = (ROOT / "tools" / "publish_wiki.ps1").read_text(encoding="utf-8")
+        self.assertIn("gh auth status --hostname github.com", publisher)
+        self.assertIn("gh auth token --hostname github.com", publisher)
+        self.assertIn("https://github.com/${Repository}.wiki.git", publisher)
+        self.assertIn("$managedPages", publisher)
+        self.assertIn("git diff --quiet", publisher)
+        self.assertIn("GIT_CONFIG_VALUE_0", publisher)
+        self.assertNotIn("WIKI_TOKEN", publisher)
+        self.assertNotIn("secrets.", publisher)
+        self.assertFalse((ROOT / ".github" / "workflows" / "sync-wiki.yml").exists())
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        self.assertIn("publish_wiki.ps1", contributing)
 
 
 if __name__ == "__main__":

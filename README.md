@@ -63,7 +63,20 @@ it and import it. Full instructions are in the
 
 The canonical [feature catalogue](docs/FEATURES.md) separates verified work,
 implemented work awaiting further verification, and planned work. It is also
-available through the public Wiki once initialized.
+available through the public [Failovarr Wiki](https://github.com/nilleiz/failovarr/wiki).
+
+## Wiki publication for maintainers
+
+The English Markdown pages in `docs/wiki/` are the canonical Wiki source.
+After a documentation change has merged to `main`, a maintainer with an
+existing GitHub CLI login publishes them using:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/publish_wiki.ps1
+```
+
+The publisher uses the local GitHub CLI session only; it stores no token in
+the repository and preserves Wiki pages outside its managed page set.
 
 ## Upgrade from Dispatcharr Redundancy
 
