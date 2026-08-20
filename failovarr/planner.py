@@ -36,6 +36,44 @@ def normalized_record(record: Mapping[str, Any], ignored: Iterable[str] = ()) ->
     return {key: value for key, value in record.items() if key not in ignored_set}
 
 
+def reconcile_surrogate_ids(
+    current: Iterable[Mapping[str, Any]],
+    incoming: Iterable[Mapping[str, Any]],
+    *,
+    natural_key: IdentityKey,
+) -> list[dict[str, Any]]:
+    """Keep follower-local IDs for relations whose IDs have no external meaning.
+
+    The caller validates IDs and natural keys first. This deliberately does
+    not alter the generic strict-ID planner used by ordinary records.
+    """
+    current_rows = [dict(row) for row in current]
+    incoming_rows = [dict(row) for row in incoming]
+    current_by_natural = {
+        identity_value(row, natural_key): row for row in current_rows
+    }
+    occupied_ids = {int(row["id"]) for row in current_rows}
+    incoming_ids = {int(row["id"]) for row in incoming_rows}
+    next_id = max(occupied_ids | incoming_ids, default=0) + 1
+    assigned_ids: set[int] = set()
+    reconciled: list[dict[str, Any]] = []
+
+    for source in incoming_rows:
+        existing = current_by_natural.get(identity_value(source, natural_key))
+        if existing is not None:
+            record_id = int(existing["id"])
+        else:
+            record_id = int(source["id"])
+            if record_id in occupied_ids or record_id in assigned_ids:
+                while next_id in occupied_ids or next_id in assigned_ids:
+                    next_id += 1
+                record_id = next_id
+                next_id += 1
+        assigned_ids.add(record_id)
+        reconciled.append({**source, "id": record_id})
+    return reconciled
+
+
 def plan_records(
     current: Iterable[Mapping[str, Any]],
     incoming: Iterable[Mapping[str, Any]],

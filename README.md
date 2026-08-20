@@ -17,7 +17,9 @@ unplanned failover.
 ## Safety model
 
 - Stable record IDs, channel UUIDs and output-profile IDs are preserved, so
-  client M3U and EPG URLs can survive a verified handoff.
+  client M3U and EPG URLs can survive a verified handoff. Channel Stream join
+  rows are reconciled by their Channel-and-Stream identity because their local
+  database IDs may be recreated by third-party mapping plugins.
 - A Main exports the complete supported graph. Each Follower independently
   selects its local import scope and can retain hardware-specific records.
 - HMAC-SHA256 signatures, monotonic sequence numbers, replay protection,

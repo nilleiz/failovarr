@@ -112,6 +112,17 @@ class NodeConfigTests(unittest.TestCase):
         snapshot = native_settings_snapshot(policies)
         self.assertEqual({key: snapshot[key] for key in policies}, policies)
 
+    def test_native_snapshot_retains_channel_stream_mirroring(self):
+        snapshot = native_settings_snapshot({"mirror_channel_stream_assignments": True})
+        self.assertTrue(snapshot["mirror_channel_stream_assignments"])
+
+    def test_cluster_profile_excludes_channel_stream_mirroring(self):
+        profile = export_cluster_profile({
+            "cluster_id": "home", "mode": "shared_storage",
+            "mirror_channel_stream_assignments": True,
+        })
+        self.assertNotIn("mirror_channel_stream_assignments", profile["settings"])
+
     def test_native_follower_scope_controls_are_applied_locally(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "node.json"

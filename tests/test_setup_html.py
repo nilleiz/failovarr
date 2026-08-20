@@ -25,6 +25,9 @@ class SetupHtmlTests(unittest.TestCase):
         self.assertIn('id="followerScope"', SETUP_HTML)
         self.assertIn('id="bundleInfo"', SETUP_HTML)
         self.assertIn('id="refreshBundleInfo"', SETUP_HTML)
+        self.assertIn('id="mirrorChannelStreamsControl"', SETUP_HTML)
+        self.assertIn('name="mirror_channel_stream_assignments"', SETUP_HTML)
+        self.assertIn("effectiveDomains().includes('channel_streams')", SETUP_HTML)
         self.assertIn("x.new_record_policy_fields[d]", SETUP_HTML)
         self.assertNotIn('id="newOutputPolicy"', SETUP_HTML)
 

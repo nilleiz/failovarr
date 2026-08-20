@@ -348,3 +348,30 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.new_stream_profile_policy, "disabled")
         self.assertEqual(config.new_epg_source_policy, "disabled")
         self.assertEqual(config.new_m3u_account_policy, "disabled")
+
+    def test_channel_stream_mirroring_is_follower_local_and_defaults_off(self):
+        default = ReplicationConfig.from_settings({
+            **BASE, "replication_scope": "iptv_content", "core_setting_keys": "",
+        })
+        enabled = ReplicationConfig.from_settings({
+            **BASE, "replication_scope": "iptv_content", "core_setting_keys": "",
+            "mirror_channel_stream_assignments": True,
+        })
+        self.assertFalse(default.mirror_channel_stream_assignments)
+        self.assertTrue(enabled.mirror_channel_stream_assignments)
+
+    def test_native_settings_show_channel_stream_mirroring_only_when_selected(self):
+        selected = build_plugin_fields({
+            **BASE, "replication_scope": "iptv_content", "core_setting_keys": "",
+        })
+        excluded = build_plugin_fields({
+            **BASE, "domains": "output_profiles",
+        })
+        selected_ids = {field.get("id") for field in selected}
+        excluded_ids = {field.get("id") for field in excluded}
+        main_ids = {field.get("id") for field in build_plugin_fields({
+            **BASE, "role": "leader", "domains": "channel_streams",
+        })}
+        self.assertIn("mirror_channel_stream_assignments", selected_ids)
+        self.assertNotIn("mirror_channel_stream_assignments", excluded_ids)
+        self.assertNotIn("mirror_channel_stream_assignments", main_ids)

@@ -15,7 +15,7 @@ MANIFEST = ROOT / "failovarr" / "plugin.json"
 def main() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["name"] == "Failovarr"
-    assert manifest["version"] == "0.7.0"
+    assert manifest["version"] == "0.7.1"
     assert manifest["repo_url"] == "https://github.com/nilleiz/failovarr"
     assert "failovarr-{version}.zip" in manifest["source_url"]
     assert manifest["help_url"] == "https://github.com/nilleiz/failovarr/wiki"

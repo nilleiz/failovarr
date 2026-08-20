@@ -177,9 +177,9 @@ def cleanup_graph():
     # Delete only the dedicated synthetic IDs, in reverse dependency order.
     ChannelOverride.objects.filter(pk=7311).delete()
     ChannelProfileMembership.objects.filter(pk=7313).delete()
-    ChannelStream.objects.filter(pk=7314).delete()
+    ChannelStream.objects.filter(channel_id=7310).delete()
     Channel.objects.filter(pk=7310).delete()
-    Stream.objects.filter(pk=7309).delete()
+    Stream.objects.filter(pk__in=(7309, 7317, 7318)).delete()
     ChannelGroupM3UAccount.objects.filter(pk=7315).delete()
     ChannelProfile.objects.filter(pk=7312).delete()
     Logo.objects.filter(pk=7308).delete()
@@ -729,6 +729,99 @@ elif ACTION == "apply_graph_verify":
         probe["cron_schedules_preserved"],
         probe["stable_channel_uuid"],
         probe["relations_preserved"],
+    )))
+
+elif ACTION == "recreate_channel_streams_main":
+    upsert_without_signals(
+        Stream,
+        7317,
+        name="Synthetic additional stream",
+        url="https://stream.invalid/alternate.ts",
+        m3u_account_id=7302,
+        logo_url="https://assets.invalid/synthetic-logo.png",
+        tvg_id="synthetic.channel",
+        channel_group_id=7307,
+        stream_profile_id=None,
+        is_custom=False,
+        stream_hash="synthetic-stream-hash-7317",
+        is_adult=False,
+        custom_properties={"fixture": True},
+        stream_id=7317,
+        stream_chno=73.2,
+        is_catchup=True,
+        catchup_days=2,
+    )
+    # This intentionally follows Stream-Mapparr's overwrite path: delete the
+    # join rows, then bulk-create the desired ordered relation set.
+    ChannelStream.objects.filter(channel_id=7310).delete()
+    ChannelStream.objects.bulk_create([
+        ChannelStream(channel_id=7310, stream_id=7317, order=0),
+        ChannelStream(channel_id=7310, stream_id=7309, order=1),
+    ])
+    manager = configure("leader", graph_settings("leader"))
+    result = manager.run_action(PLUGIN_KEY, "export_now")
+    emit(result, result.get("status") == "exported")
+
+elif ACTION == "prepare_channel_stream_mirror_follower":
+    upsert_without_signals(
+        Stream,
+        7318,
+        name="Synthetic follower-only stream",
+        url="https://stream.invalid/follower-only.ts",
+        m3u_account_id=7302,
+        logo_url="https://assets.invalid/synthetic-logo.png",
+        tvg_id="synthetic.channel",
+        channel_group_id=7307,
+        stream_profile_id=None,
+        is_custom=False,
+        stream_hash="synthetic-stream-hash-7318",
+        is_adult=False,
+        custom_properties={"fixture": True},
+        stream_id=7318,
+        stream_chno=73.3,
+        is_catchup=True,
+        catchup_days=2,
+    )
+    ChannelStream.objects.update_or_create(
+        channel_id=7310, stream_id=7318, defaults={"order": 2},
+    )
+    manager = configure("follower", {
+        **graph_settings("follower"), "mirror_channel_stream_assignments": True,
+    })
+    result = manager.run_action(PLUGIN_KEY, "validate_config")
+    emit(result, result.get("status") == "success")
+
+elif ACTION == "apply_channel_stream_mirror_verify":
+    settings = {
+        **graph_settings("follower"), "mirror_channel_stream_assignments": True,
+    }
+    manager = configure("follower", settings)
+    preview = manager.run_action(PLUGIN_KEY, "preview_latest")
+    applied = manager.run_action(PLUGIN_KEY, "apply_latest")
+    assignments = list(
+        ChannelStream.objects.filter(channel_id=7310)
+        .order_by("order", "stream_id").values_list("id", "stream_id", "order")
+    )
+    probe = {
+        "preview": preview,
+        "applied": applied,
+        "assignments": assignments,
+        "assignment_streams": [(stream_id, order) for _id, stream_id, order in assignments],
+        "recreated_relation_kept_local_id": any(
+            record_id == 7314 and stream_id == 7309 and order == 1
+            for record_id, stream_id, order in assignments
+        ),
+        "follower_only_assignment_removed": not ChannelStream.objects.filter(
+            channel_id=7310, stream_id=7318,
+        ).exists(),
+    }
+    emit(probe, all((
+        preview.get("status") == "preview",
+        preview.get("summary") == {"create": 2, "update": 1, "delete": 1, "conflicts": 0},
+        applied.get("status") == "applied",
+        probe["assignment_streams"] == [(7317, 0), (7309, 1)],
+        probe["recreated_relation_kept_local_id"],
+        probe["follower_only_assignment_removed"],
     )))
 
 elif ACTION == "prepare_core_scope_main":

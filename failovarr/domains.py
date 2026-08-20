@@ -17,6 +17,7 @@ from .planner import (
     identity_value,
     nullable_identity,
     plan_records,
+    reconcile_surrogate_ids,
 )
 
 
@@ -29,6 +30,7 @@ class DomainSpec:
     unique_keys: tuple[IdentityKey, ...] = ()
     supports_locked: bool = False
     virtual_fields: tuple[str, ...] = ()
+    surrogate_id: bool = False
 
     @property
     def model_fields(self) -> tuple[str, ...]:
@@ -173,6 +175,9 @@ def _specs() -> dict[str, DomainSpec]:
             "channel_streams", ChannelStream,
             ("id", "channel_id", "stream_id", "order"),
             ("channel_id", "stream_id"),
+            # Stream-Mapparr deliberately rebuilds this leaf relation. Its
+            # primary key is not referenced by another replicated domain.
+            surrogate_id=True,
         ),
         DomainSpec(
             "channel_group_m3u_accounts", ChannelGroupM3UAccount,
@@ -392,10 +397,20 @@ def plan_domains(payload_domains: Mapping[str, Any], config: ReplicationConfig) 
         _validate_records(spec, incoming)
         current = _query_records(spec, config)
         desired, blocked_new_ids = _prepare_desired_records(spec, incoming, current, config)
+        if spec.surrogate_id:
+            desired = reconcile_surrogate_ids(
+                current, desired, natural_key=spec.natural_key,
+            )
         _validate_records(spec, desired)
         plan = plan_records(
             current, desired, natural_key=spec.natural_key,
-            allow_deletes=config.allow_deletes,
+            allow_deletes=(
+                config.allow_deletes
+                or (
+                    spec.name == "channel_streams"
+                    and getattr(config, "mirror_channel_stream_assignments", False)
+                )
+            ),
             unique_keys=tuple(dict.fromkeys((spec.natural_key, *spec.unique_keys))),
         )
         for record_id in blocked_new_ids:

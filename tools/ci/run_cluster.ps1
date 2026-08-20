@@ -78,6 +78,9 @@ try {
     Invoke-Probe $main "export_graph"
     Invoke-Probe $slave "client_identity_mismatch"
     Invoke-Probe $slave "apply_graph_verify"
+    Invoke-Probe $main "recreate_channel_streams_main"
+    Invoke-Probe $slave "prepare_channel_stream_mirror_follower"
+    Invoke-Probe $slave "apply_channel_stream_mirror_verify"
     # A Follower may intentionally keep DVR settings local. Initialization
     # must filter Main's complete Settings bundle before replacing selected
     # rows, otherwise PostgreSQL rejects the untouched unique dvr_settings key.

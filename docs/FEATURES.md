@@ -7,7 +7,7 @@ statuses aligned when changing it.
 
 - **CORE-001** — Signed, replay-protected configuration bundles.
 - **CORE-002** — Complete Main export, Follower-local scope and local record protection.
-- **CORE-003** — Stable IDs, dry-run planning, transactional apply and deletion safety.
+- **CORE-003** — Identity-aware planning, transactional apply and deletion safety.
 - **UX-001** — Setup Assistant and native non-secret Plugin Settings.
 - **TRANSPORT-001** — Direct Pull, readiness and shared-storage transport.
 - **STORAGE-001** — Filesystem, WebDAV, S3, SFTP and SMB.

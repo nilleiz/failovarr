@@ -46,6 +46,13 @@ API keys are intentionally not copied.
 Review the conflict. For an independently built Follower, Initialization may
 be appropriate. Never remove Dispatcharr locks merely to force a replication.
 
+**Channel Stream IDs changed after a mapping plugin ran**
+
+Failovarr matches Channel Stream assignments by Channel and Stream, not by the
+join-row ID. A current release should therefore import the recreated rows. If
+Main should also remove assignments that exist only on the Follower, enable
+**Mirror Main stream assignments exactly** and preview the deletion first.
+
 ## Service and logs
 
 The replication service is container-wide even though Dispatcharr has multiple
