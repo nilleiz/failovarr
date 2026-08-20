@@ -16,7 +16,7 @@ class ReleaseContractTests(unittest.TestCase):
     def test_manifest_points_to_versioned_release_asset_and_repository_docs(self):
         manifest = json.loads((ROOT / "failovarr" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "Failovarr")
-        self.assertEqual(manifest["version"], "0.7.0")
+        self.assertEqual(manifest["version"], "0.7.1")
         self.assertEqual(manifest["source_type"], "external")
         self.assertIn("releases/download/v{version}/failovarr-{version}.zip", manifest["source_url"])
         self.assertEqual(
@@ -37,16 +37,32 @@ class ReleaseContractTests(unittest.TestCase):
             self.assertIn(contract, workflow)
         self.assertIn("git/matching-refs/tags/$tag", workflow)
         self.assertIn('"refs/tags/$tag"', workflow)
+        self.assertIn("git/ref/tags/$tag", workflow)
         self.assertIn('$release.tag_name -notlike "untagged-*"', workflow)
         self.assertIn('tag_name = $env:TAG', workflow)
         self.assertIn('target_commitish = $env:GITHUB_SHA', workflow)
-        self.assertNotIn("git/ref/tags/$tag", workflow)
         self.assertNotIn("gh release upload", workflow)
         self.assertNotIn("--hostname uploads.github.com", workflow)
         self.assertNotIn("releases/tags/$env:TAG", workflow)
         self.assertLess(workflow.index("Invoke-RestMethod"), workflow.index("Remove-ReleaseAsset $existing[0].id"))
         self.assertIn("group: failovarr-release", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+
+    def test_release_workflow_promotes_verified_prereleases_without_rebuilding(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        for contract in (
+            "RELEASE_OPERATION=promote", "Verify published pre-release assets for promotion",
+            "Promotion source must contain exactly the ZIP and checksum assets",
+            "Published ZIP checksum does not match the checksum asset",
+            "Could not promote pre-release $env:TAG", "prerelease = $false",
+        ):
+            self.assertIn(contract, workflow)
+        self.assertIn("if: env.RELEASE_OPERATION == 'publish'", workflow)
+        self.assertIn("if: env.RELEASE_OPERATION == 'promote'", workflow)
+        self.assertLess(
+            workflow.index("Verify published pre-release assets for promotion"),
+            workflow.index("Could not promote pre-release $env:TAG"),
+        )
 
     def test_workflows_use_node24_actions_and_quote_markdown_summaries_safely(self):
         checkout_pin = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"

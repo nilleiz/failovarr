@@ -51,6 +51,13 @@ The display order follows Dispatcharr: Channels, M3U & EPG Manager, Logo
 Manager, then Settings. `Allow replicated deletions` is a Follower-local policy
 and is off by default.
 
+`Mirror Main stream assignments exactly` is also Follower-local and appears
+when Channel Streams are in scope. It removes only Channel Stream assignments
+that are absent from Main; it does not enable deletion of Channels, Streams or
+any other replicated records. Failovarr always compares Channel Stream rows by
+their Channel-and-Stream identity, so a mapping plugin may recreate those rows
+with new local IDs without blocking import.
+
 ## Records kept local on this Follower
 
 This section appears only for imported areas, ordered as M3U Accounts, EPG

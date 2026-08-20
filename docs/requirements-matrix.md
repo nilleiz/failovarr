@@ -1,3 +1,13 @@
+# 0.7.1 ChannelStream reconciliation gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P701-01 | A recreated ChannelStream join row must be matched by its channel-and-stream identity rather than by its local surrogate ID. | Reconcile only `channel_streams` to local IDs before normal planning; leave all other domain identities strict. | Planner and synthetic-cluster recreation scenario. | implemented; CI pending |
+| P701-02 | A Follower can explicitly mirror Main stream assignments without enabling deletion for every replicated domain. | Add follower-local `mirror_channel_stream_assignments`; it authorizes deletes only for absent ChannelStream relations. | Configuration/UI coverage and synthetic-cluster mirror scenario. | implemented; CI pending |
+| P701-03 | Existing 0.7.0 bundles and configuration profiles remain compatible. | Keep bundle/profile schemas unchanged; retain initializer ID replacement semantics. | Package and synthetic-cluster qualification on a 0.7.1 candidate. | implemented; CI pending |
+| P701-04 | Every approved public change has an auditable Draft-PR and operator-gated CI lifecycle. | Record the mandatory branch, push, Draft-PR, CI-review, fix-plan and full-qualification sequence in public agent guidance. | Public instruction review and the 0.7.1 Draft-PR lifecycle. | implemented; CI pending |
+| P701-05 | A verified tagged pre-release can become stable without changing its assets or tag. | The release workflow verifies the existing pre-release and promotes it in place only after the explicit stable request. | Release-workflow contract coverage and operator-approved promotion after lab acceptance. | implemented; CI pending |
+
 # 0.7.0 public product extraction gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |

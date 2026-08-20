@@ -343,6 +343,8 @@ def build_plugin_fields(settings: Mapping[str, Any] | None = None,
         for key, label in CORE_SETTING_GROUPS.items():
             fields.append({"id": f"replicate_core_{key}", "label": label, "type": "boolean", "default": key in core, "description": "Import this Dispatcharr Settings group from Main."})
         fields.append({"id": "allow_deletes", "label": "Allow replicated deletions", "type": "boolean", "default": as_bool(current.get("allow_deletes", False)), "description": "Follower-only. Off by default; enable only after a verified first synchronization and rollback plan."})
+        if "channel_streams" in domains:
+            fields.append({"id": "mirror_channel_stream_assignments", "label": "Mirror Main stream assignments exactly", "type": "boolean", "default": as_bool(current.get("mirror_channel_stream_assignments", False)), "description": "Follower-only. Remove stream assignments absent from Main without enabling deletion for Channels, Streams or other domains."})
         fields.append(_info("Records kept local", "Protected records retain their complete local configuration and stable ID. They are inactive until their domain is imported."))
     raw_protected = current.get("protected_records") or {}
     if not isinstance(raw_protected, Mapping):
@@ -599,6 +601,7 @@ class ReplicationConfig:
     new_epg_source_policy: str
     new_m3u_account_policy: str
     allow_deletes: bool
+    mirror_channel_stream_assignments: bool
     automatic_apply: bool
     auto_start: bool
     interval_seconds: int
@@ -664,6 +667,7 @@ class ReplicationConfig:
             new_epg_source_policy=str(settings.get("new_epg_source_policy", "disabled")).strip().lower(),
             new_m3u_account_policy=str(settings.get("new_m3u_account_policy", "disabled")).strip().lower(),
             allow_deletes=as_bool(settings.get("allow_deletes", False)),
+            mirror_channel_stream_assignments=as_bool(settings.get("mirror_channel_stream_assignments", False)),
             automatic_apply=as_bool(settings.get("automatic_apply", False)),
             auto_start=as_bool(settings.get("auto_start", False)),
             interval_seconds=interval,

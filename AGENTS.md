@@ -26,3 +26,22 @@ candidates require the full qualification set once on the final PR tree.
 After a squash merge, the release gate may reuse that evidence only when the
 merged PR is unambiguous, its tree ID is identical to `main`, and all required
 suites succeeded. Do not trigger tests merely by marking a Draft PR ready.
+
+## Required public delivery lifecycle
+
+For every approved public change, create or reuse one feature branch, commit
+the complete change deliberately, push it promptly, and create or update one
+Draft PR against `main`. Complete the PR template and report the resulting
+Actions URL, then wait for the operator to say that the run has finished; do
+not poll Actions. Only then inspect the completed checks and logs. For a CI
+failure, first provide a concrete fix plan and wait for explicit approval
+before editing; commit and push each approved fix to the same Draft PR and
+repeat the wait.
+
+When the final PR tree is selectively green, run one full qualification on
+that exact head and wait for the operator's completed-run notice. Only a green
+final qualification authorizes setting the PR ready and squash-merging it.
+After the merge, publish the requested pre-release through the release
+workflow. Stable promotion is a separate, explicit operator decision after
+local-lab approval; it must promote the same verified tagged assets in place,
+not rebuild or retag them.

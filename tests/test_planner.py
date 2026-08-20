@@ -3,7 +3,7 @@ import unittest
 
 os.environ["FAILOVARR_NO_AUTOSTART"] = "1"
 
-from failovarr.planner import plan_records
+from failovarr.planner import plan_records, reconcile_surrogate_ids
 
 
 class PlannerTests(unittest.TestCase):
@@ -103,3 +103,62 @@ class PlannerTests(unittest.TestCase):
                 [{"id": 1, "name": "one", "hash": "same"}, {"id": 2, "name": "two", "hash": "same"}],
                 natural_key="name", unique_keys=("name", "hash"), allow_deletes=False,
             )
+
+    def test_surrogate_relation_keeps_local_id_for_same_natural_key(self):
+        result = reconcile_surrogate_ids(
+            [{"id": 40, "channel_id": 2, "stream_id": 7, "order": 0}],
+            [{"id": 90, "channel_id": 2, "stream_id": 7, "order": 1}],
+            natural_key=("channel_id", "stream_id"),
+        )
+        self.assertEqual(result[0]["id"], 40)
+        plan = plan_records(
+            [{"id": 40, "channel_id": 2, "stream_id": 7, "order": 0}], result,
+            natural_key=("channel_id", "stream_id"), allow_deletes=False,
+        )
+        self.assertEqual(plan["conflicts"], [])
+        self.assertEqual(plan["update"][0]["id"], 40)
+        self.assertEqual(plan["update"][0]["changes"]["order"]["to"], 1)
+
+    def test_surrogate_relation_handles_recreated_id_swaps(self):
+        current = [
+            {"id": 40, "channel_id": 2, "stream_id": 7, "order": 0},
+            {"id": 41, "channel_id": 2, "stream_id": 8, "order": 1},
+        ]
+        incoming = [
+            {"id": 41, "channel_id": 2, "stream_id": 7, "order": 0},
+            {"id": 40, "channel_id": 2, "stream_id": 8, "order": 1},
+        ]
+        result = reconcile_surrogate_ids(
+            current, incoming, natural_key=("channel_id", "stream_id"),
+        )
+        self.assertEqual([row["id"] for row in result], [40, 41])
+        self.assertEqual(
+            plan_records(
+                current, result, natural_key=("channel_id", "stream_id"), allow_deletes=False,
+            )["conflicts"],
+            [],
+        )
+
+    def test_surrogate_relation_allocates_above_colliding_ids(self):
+        result = reconcile_surrogate_ids(
+            [{"id": 40, "channel_id": 2, "stream_id": 7, "order": 0}],
+            [{"id": 40, "channel_id": 2, "stream_id": 8, "order": 0}],
+            natural_key=("channel_id", "stream_id"),
+        )
+        self.assertEqual(result[0]["id"], 41)
+
+    def test_surrogate_relation_keeps_free_main_id_for_new_assignment(self):
+        result = reconcile_surrogate_ids(
+            [{"id": 40, "channel_id": 2, "stream_id": 7, "order": 0}],
+            [{"id": 70, "channel_id": 2, "stream_id": 8, "order": 0}],
+            natural_key=("channel_id", "stream_id"),
+        )
+        self.assertEqual(result[0]["id"], 70)
+
+    def test_strict_records_still_conflict_without_surrogate_reconciliation(self):
+        plan = plan_records(
+            [{"id": 40, "channel_id": 2, "stream_id": 7}],
+            [{"id": 90, "channel_id": 2, "stream_id": 7}],
+            natural_key=("channel_id", "stream_id"), allow_deletes=False,
+        )
+        self.assertEqual(plan["conflicts"][0]["reason"], "natural_key_is_used_by_another_id")

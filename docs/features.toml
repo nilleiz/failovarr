@@ -14,7 +14,7 @@ evidence = "0.6.17 qualification synthetic cluster"
 
 [[feature]]
 id = "CORE-003"
-title = "Stable IDs, dry-run planning, transactional apply and deletion safety"
+title = "Identity-aware planning, transactional apply and deletion safety"
 status = "implemented_verified"
 evidence = "0.6.17 qualification synthetic cluster"
 

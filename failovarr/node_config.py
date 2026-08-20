@@ -95,7 +95,7 @@ _NATIVE_SCALAR_FIELDS = {
     "storage_container", "storage_username", "storage_timeout_seconds", "sftp_known_hosts_path",
     "s3_region", "s3_addressing_style", "s3_prefix", "smb_domain", "new_output_profile_policy",
     "new_stream_profile_policy", "new_epg_source_policy", "new_m3u_account_policy",
-    "automatic_apply", "allow_deletes", "auto_start", "import_on_start", "interval_seconds",
+    "automatic_apply", "allow_deletes", "mirror_channel_stream_assignments", "auto_start", "import_on_start", "interval_seconds",
     "confirm", "replication_scope", "state_path", "client_vip", "vip_interface", "vip_prefix_length",
     "storage_ca_path", "storage_allow_insecure_http", "client_identity_users",
 }

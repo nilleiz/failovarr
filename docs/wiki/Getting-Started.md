@@ -52,6 +52,10 @@ setup port.
    deletions and conflicts.
 3. Resolve unexpected conflicts. Keep replicated deletions off for the first
    synchronization.
+   If a mapping plugin recreates Channel Stream rows, the same Channel-and-
+   Stream assignment no longer conflicts merely because its database ID
+   changed. Enable **Mirror Main stream assignments exactly** only when Main
+   must also remove Follower-only assignments.
 4. Click **Import latest bundle**. Repeating the action after a successful
    import shows **Already up to date** rather than an error.
 5. Confirm a client M3U/EPG URL and a stream. Check that protected Output
