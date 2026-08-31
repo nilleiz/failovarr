@@ -1,3 +1,12 @@
+# 0.8.0 Stream lifecycle replication gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P800-01 | A Follower must receive the authoritative availability lifecycle for every replicated stream and channel-group/account relation. | Version-2 bundles include signed `is_stale` and `last_seen` fields for `streams` and `channel_group_m3u_accounts`; planner updates those fields transactionally without changing their identities. | Package tests and synthetic cluster lifecycle convergence scenario. | implemented; CI pending |
+| P800-02 | An upgraded Follower must never silently treat a legacy bundle as a complete lifecycle snapshot. | Accept bundle formats 1 and 2 at envelope verification; reject format 1 with a selected lifecycle domain with an actionable Main re-export message. | Bundle-format and engine compatibility tests. | implemented; CI pending |
+| P800-03 | Lifecycle values in a signed bundle must be type-safe and tamper-evident. | Validate `is_stale` as Boolean and `last_seen` as ISO-8601 timestamps before planning; retain normal payload-hash and HMAC verification. | Domain schema and bundle tampering tests. | implemented; CI pending |
+| P800-04 | Lifecycle replication must not introduce local runtime state into the active/passive data contract. | Continue excluding viewer counts, stream statistics, local files, caches and automatic timestamps. | Export-schema regression tests and public documentation review. | implemented; CI pending |
+
 # 0.7.1 ChannelStream reconciliation gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |

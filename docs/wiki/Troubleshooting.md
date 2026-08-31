@@ -36,6 +36,13 @@ this Follower scope. Preview can still be used for inspection.
 This node knows a newer sequence. Do not force an old bundle; export from the
 current authority and investigate unexpected promotion or state loss.
 
+**Bundle format 1 does not include lifecycle domains**
+
+An upgraded Follower selected Stream or channel-group/account replication, but
+Main still exported a pre-0.8.0 bundle. Upgrade Main, export a fresh format-2
+bundle, then preview it again. Do not reset the Follower or manually clear
+stale Streams: the normal import updates the signed lifecycle fields.
+
 **Client identity mismatch**
 
 Client-relevant IPTV user settings differ. Align them manually; passwords and

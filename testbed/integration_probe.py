@@ -12,6 +12,7 @@ import os
 import pwd
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -48,6 +49,8 @@ STATE_PATH = "/data/failovarr-state"
 MAIN_URL = os.environ.get("LAB_MAIN_URL", "http://main:9192")
 SLAVE_URL = os.environ.get("LAB_SLAVE_URL", "http://slave:9192")
 GRAPH_IDS = range(7301, 7316)
+LIFECYCLE_MAIN_AT = datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+LIFECYCLE_STALE_AT = datetime(2026, 7, 1, 0, tzinfo=timezone.utc)
 GRAPH_DOMAINS = ",".join((
     "user_agents",
     "stream_profiles",
@@ -284,6 +287,8 @@ def prepare_graph():
         stream_chno=73.1,
         is_catchup=True,
         catchup_days=2,
+        is_stale=False,
+        last_seen=LIFECYCLE_MAIN_AT,
     )
     upsert_without_signals(
         Channel,
@@ -343,6 +348,8 @@ def prepare_graph():
         auto_channel_sync=True,
         auto_sync_channel_start=73.0,
         auto_sync_channel_end=79.0,
+        is_stale=False,
+        last_seen=LIFECYCLE_MAIN_AT,
     )
     from core.scheduling import create_or_update_periodic_task
 
@@ -729,6 +736,64 @@ elif ACTION == "apply_graph_verify":
         probe["cron_schedules_preserved"],
         probe["stable_channel_uuid"],
         probe["relations_preserved"],
+    )))
+
+elif ACTION == "prepare_lifecycle_drift_slave":
+    # Keep the exact Main identities and ChannelStream assignment, but make
+    # Dispatcharr's provider lifecycle visibly diverge on the Follower.
+    Stream.objects.filter(pk=7309).update(is_stale=True, last_seen=LIFECYCLE_STALE_AT)
+    ChannelGroupM3UAccount.objects.filter(pk=7315).update(
+        is_stale=True, last_seen=LIFECYCLE_STALE_AT,
+    )
+    emit({
+        "stream_stale": Stream.objects.get(pk=7309).is_stale,
+        "group_account_stale": ChannelGroupM3UAccount.objects.get(pk=7315).is_stale,
+    }, Stream.objects.get(pk=7309).is_stale and ChannelGroupM3UAccount.objects.get(pk=7315).is_stale)
+
+elif ACTION == "export_lifecycle":
+    manager = configure("leader", graph_settings("leader"))
+    result = manager.run_action(PLUGIN_KEY, "export_now")
+    envelope = ReplicationEngine(graph_settings("leader")).latest_for_http()
+    stream_record = next(row for row in envelope["payload"]["domains"]["streams"] if row["id"] == 7309)
+    group_account_record = next(
+        row for row in envelope["payload"]["domains"]["channel_group_m3u_accounts"] if row["id"] == 7315
+    )
+    lifecycle_schema = all(
+        field in stream_record and field in group_account_record
+        for field in ("is_stale", "last_seen")
+    ) and not any(
+        field in stream_record
+        for field in ("current_viewers", "stream_stats", "stream_stats_updated_at", "local_file", "updated_at")
+    )
+    emit({**result, "lifecycle_schema": lifecycle_schema}, result.get("status") == "exported" and lifecycle_schema)
+
+elif ACTION == "apply_lifecycle_verify":
+    manager = configure("follower", graph_settings("follower"))
+    preview = manager.run_action(PLUGIN_KEY, "preview_latest")
+    applied = manager.run_action(PLUGIN_KEY, "apply_latest")
+    replay_preview = manager.run_action(PLUGIN_KEY, "preview_latest")
+    stream = Stream.objects.get(pk=7309)
+    group_account = ChannelGroupM3UAccount.objects.get(pk=7315)
+    channel_stream = ChannelStream.objects.get(channel_id=7310, stream_id=7309)
+    probe = {
+        "preview": preview,
+        "applied": applied,
+        "replay_preview": replay_preview,
+        "lifecycle_converged": (
+            stream.is_stale is False
+            and stream.last_seen == LIFECYCLE_MAIN_AT
+            and group_account.is_stale is False
+            and group_account.last_seen == LIFECYCLE_MAIN_AT
+        ),
+        "assignment_unchanged": channel_stream.order == 0,
+    }
+    emit(probe, all((
+        preview.get("status") == "preview",
+        preview.get("summary", {}).get("update") == 2,
+        applied.get("status") == "applied",
+        replay_preview.get("summary") == {"create": 0, "update": 0, "delete": 0, "conflicts": 0},
+        probe["lifecycle_converged"],
+        probe["assignment_unchanged"],
     )))
 
 elif ACTION == "recreate_channel_streams_main":

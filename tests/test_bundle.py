@@ -3,7 +3,7 @@ import unittest
 
 os.environ["FAILOVARR_NO_AUTOSTART"] = "1"
 
-from failovarr.bundle import create_envelope, verify_envelope
+from failovarr.bundle import BUNDLE_FORMAT, create_envelope, payload_hash, sign_payload, verify_envelope
 
 
 class BundleTests(unittest.TestCase):
@@ -17,7 +17,31 @@ class BundleTests(unittest.TestCase):
         )
         payload = verify_envelope(envelope, self.secret, "home")
         self.assertEqual(payload["sequence"], 7)
+        self.assertEqual(payload["format"], BUNDLE_FORMAT)
         self.assertEqual(payload["domains"]["output_profiles"][0]["id"], 3)
+
+    def test_signed_legacy_format_remains_verifiable(self):
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=7,
+            domains={}, secret=self.secret,
+        )
+        envelope["payload"]["format"] = 1
+        envelope["payload_sha256"] = payload_hash(envelope["payload"])
+        envelope["signature"] = sign_payload(envelope["payload"], self.secret)
+
+        self.assertEqual(verify_envelope(envelope, self.secret, "home")["format"], 1)
+
+    def test_unknown_bundle_format_is_rejected_even_when_signed(self):
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=7,
+            domains={}, secret=self.secret,
+        )
+        envelope["payload"]["format"] = 3
+        envelope["payload_sha256"] = payload_hash(envelope["payload"])
+        envelope["signature"] = sign_payload(envelope["payload"], self.secret)
+
+        with self.assertRaisesRegex(ValueError, "Unsupported bundle format: 3"):
+            verify_envelope(envelope, self.secret, "home")
 
     def test_client_identity_is_signed_but_optional(self):
         envelope = create_envelope(

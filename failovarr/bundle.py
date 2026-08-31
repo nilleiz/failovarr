@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 
-BUNDLE_FORMAT = 1
+BUNDLE_FORMAT = 2
+SUPPORTED_BUNDLE_FORMATS = frozenset((1, BUNDLE_FORMAT))
 
 
 def canonical_json(value: Any) -> bytes:
@@ -67,7 +68,7 @@ def verify_envelope(envelope: Mapping[str, Any], secret: str, cluster_id: str) -
     expected = sign_payload(payload, secret)
     if not hmac.compare_digest(expected, signature):
         raise ValueError("Bundle signature is invalid")
-    if payload.get("format") != BUNDLE_FORMAT:
+    if payload.get("format") not in SUPPORTED_BUNDLE_FORMATS:
         raise ValueError(f"Unsupported bundle format: {payload.get('format')}")
     if payload.get("cluster_id") != cluster_id:
         raise ValueError("Bundle belongs to a different cluster")

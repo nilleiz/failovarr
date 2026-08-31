@@ -24,6 +24,9 @@ unplanned failover.
   selects its local import scope and can retain hardware-specific records.
 - HMAC-SHA256 signatures, monotonic sequence numbers, replay protection,
   preview/conflict checks and one transaction protect an import.
+- Stream availability lifecycle (`is_stale` and `last_seen`) is part of the
+  signed Stream and channel-group/account snapshot. Runtime viewer and stream
+  statistics remain local to each Dispatcharr node.
 - Users, API keys, EPG programme caches, runtime data, backups and third-party
   plugin settings are not replicated.
 

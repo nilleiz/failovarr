@@ -21,6 +21,12 @@ from .planner import (
 )
 
 
+LIFECYCLE_FIELDS = {
+    "streams": ("is_stale", "last_seen"),
+    "channel_group_m3u_accounts": ("is_stale", "last_seen"),
+}
+
+
 @dataclass(frozen=True)
 class DomainSpec:
     name: str
@@ -137,7 +143,7 @@ def _specs() -> dict[str, DomainSpec]:
                 "id", "name", "url", "m3u_account_id", "logo_url", "tvg_id",
                 "channel_group_id", "stream_profile_id", "is_custom", "stream_hash",
                 "is_adult", "custom_properties", "stream_id", "stream_chno",
-                "is_catchup", "catchup_days",
+                "is_catchup", "catchup_days", "is_stale", "last_seen",
             ),
             ("m3u_account_id", "stream_hash", "id"),
             ("stream_hash",),
@@ -184,7 +190,7 @@ def _specs() -> dict[str, DomainSpec]:
             (
                 "id", "channel_group_id", "m3u_account_id", "custom_properties",
                 "enabled", "auto_channel_sync", "auto_sync_channel_start",
-                "auto_sync_channel_end",
+                "auto_sync_channel_end", "is_stale", "last_seen",
             ),
             ("channel_group_id", "m3u_account_id"),
         ),
@@ -203,7 +209,9 @@ def _json_compatible(value: Any) -> Any:
         return {str(key): _json_compatible(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_compatible(item) for item in value]
-    if isinstance(value, (UUID, datetime, date, time, Decimal)):
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, (UUID, Decimal)):
         return str(value)
     return value
 
@@ -346,6 +354,26 @@ def _validate_records(spec: DomainSpec, records: list[dict[str, Any]]) -> None:
                 f"Domain {spec.name} record {index} has invalid schema "
                 f"(missing={missing}, unknown={unknown})"
             )
+        if spec.name in LIFECYCLE_FIELDS:
+            if type(record["is_stale"]) is not bool:
+                raise ValueError(
+                    f"Domain {spec.name} record {index} has an invalid is_stale"
+                )
+            last_seen = record["last_seen"]
+            if not isinstance(last_seen, str) or "T" not in last_seen or not last_seen.strip():
+                raise ValueError(
+                    f"Domain {spec.name} record {index} has an invalid last_seen"
+                )
+            try:
+                parsed_last_seen = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError(
+                    f"Domain {spec.name} record {index} has an invalid last_seen"
+                ) from exc
+            if parsed_last_seen.tzinfo is None:
+                raise ValueError(
+                    f"Domain {spec.name} record {index} has an invalid last_seen"
+                )
         record_id = record["id"]
         if isinstance(record_id, bool) or not isinstance(record_id, int) or record_id < 1:
             raise ValueError(f"Domain {spec.name} record {index} has an invalid id")

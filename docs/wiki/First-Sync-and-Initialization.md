@@ -17,6 +17,16 @@ already applied for the current Follower scope. Preview remains available;
 Import is disabled. If a scope change makes the same bundle applicable again,
 it is shown as verified.
 
+## 0.8.0 lifecycle-bundle upgrade
+
+Version 2 bundles carry the authoritative Stream and channel-group/account
+lifecycle state, including `is_stale` and `last_seen`. Upgrade Main first and
+export a fresh bundle before upgrading a Follower. A new Follower intentionally
+refuses a version 1 bundle when its selected scope includes either lifecycle
+domain; this prevents stale local availability flags from being retained
+silently. No initialization or direct database cleanup is required for this
+upgrade.
+
 ## Initialize follower from Main
 
 Use Initialization only when a Follower was built independently and normal

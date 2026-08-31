@@ -19,6 +19,12 @@ status = "implemented_verified"
 evidence = "0.6.17 qualification synthetic cluster"
 
 [[feature]]
+id = "CORE-004"
+title = "Signed Stream availability lifecycle replication"
+status = "implemented_incomplete"
+evidence = "0.8.0 package and synthetic-cluster qualification pending"
+
+[[feature]]
 id = "UX-001"
 title = "Setup Assistant and native non-secret Plugin Settings"
 status = "implemented_verified"

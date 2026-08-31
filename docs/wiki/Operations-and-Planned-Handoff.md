@@ -23,6 +23,10 @@ already applied for this Follower scope. It is not an import failure.
 Returning nodes always begin as Followers of the newer authority. Never restore
 an old Main backup over newer Follower changes.
 
+When upgrading to 0.8.0, install it on Main and publish a fresh format-2 bundle
+before a Follower is activated. The new bundle includes Stream availability
+lifecycle state, so preview it before the normal cold-standby import.
+
 ## Planned online handoff
 
 Planned handoff requires Direct or Hybrid transport, both services running,

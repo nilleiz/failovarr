@@ -2,6 +2,14 @@
 
 All notable changes are documented here.
 
+## 0.8.0 — Development Preview
+
+- Version-2 signed bundles now replicate Stream and channel-group/account
+  availability lifecycle (`is_stale` and `last_seen`).
+- An upgraded Follower rejects a legacy version-1 bundle when its selected
+  scope needs lifecycle replication, with an actionable Main re-export
+  message.
+
 ## 0.7.1 — Development Preview
 
 - Channel Stream assignments now reconcile by their Channel-and-Stream

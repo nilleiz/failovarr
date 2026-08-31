@@ -1,10 +1,11 @@
 import os
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 os.environ["FAILOVARR_NO_AUTOSTART"] = "1"
 
-from failovarr.domains import DomainSpec, _prepare_desired_records, apply_local_overrides
+from failovarr.domains import DomainSpec, _json_compatible, _prepare_desired_records, _validate_records, apply_local_overrides
 
 
 class OverrideTests(unittest.TestCase):
@@ -73,3 +74,31 @@ class OverrideTests(unittest.TestCase):
                     )
                     self.assertEqual(desired[0]["is_active"], policy != "disabled")
                     self.assertEqual(blocked, [7] if policy == "block" else [])
+
+
+class LifecycleSchemaTests(unittest.TestCase):
+    def setUp(self):
+        self.spec = DomainSpec(
+            "streams", None, ("id", "is_stale", "last_seen"), "id",
+        )
+        self.record = {
+            "id": 7,
+            "is_stale": False,
+            "last_seen": "2026-08-31T12:00:00+00:00",
+        }
+
+    def test_lifecycle_record_accepts_boolean_and_aware_iso_timestamp(self):
+        _validate_records(self.spec, [self.record])
+
+    def test_datetime_export_uses_canonical_iso_timestamp(self):
+        value = datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(_json_compatible(value), "2026-08-31T12:00:00+00:00")
+
+    def test_lifecycle_record_rejects_non_boolean_stale_flag(self):
+        with self.assertRaisesRegex(ValueError, "invalid is_stale"):
+            _validate_records(self.spec, [{**self.record, "is_stale": 0}])
+
+    def test_lifecycle_record_rejects_invalid_or_naive_timestamp(self):
+        for value in ("not-a-date", "2026-08-31T12:00:00", "2026-08-31 12:00:00+00:00", ""):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "invalid last_seen"):
+                _validate_records(self.spec, [{**self.record, "last_seen": value}])
