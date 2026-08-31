@@ -447,6 +447,16 @@ class NodeConfigTests(unittest.TestCase):
         self.assertEqual(result["reason"], "not_newer")
         self.assertIn("Already up to date", result["message"])
 
+    def test_force_import_reapplies_only_through_the_explicit_engine_flag(self):
+        server = SetupServer({}, logging.getLogger("test"))
+        engine = Mock()
+        engine.apply_latest.return_value = {"status": "applied", "forced_reapply": True}
+        with patch.object(server, "_engine", return_value=engine):
+            result = server.force_import_latest()
+        engine.apply_latest.assert_called_once_with(force_reapply=True)
+        self.assertEqual(result["status"], "applied")
+        self.assertIn("reapplied", result["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

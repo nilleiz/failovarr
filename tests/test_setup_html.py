@@ -95,6 +95,10 @@ class SetupHtmlTests(unittest.TestCase):
         self.assertIn("Already up to date", SETUP_HTML)
         self.assertIn("response.status==='waiting'?'warn'", SETUP_HTML)
         self.assertIn("button.dataset.bundleDisabled", SETUP_HTML)
+        self.assertIn('id="forceImport"', SETUP_HTML)
+        self.assertIn("id==='forceImport'?current:ready", SETUP_HTML)
+        self.assertIn("Force import latest bundle", SETUP_HTML)
+        self.assertIn("Reapply the current verified Main bundle?", SETUP_HTML)
 
     def test_follower_scope_uses_dispatcharr_display_order(self):
         self.assertEqual(list(DOMAIN_GROUPS), ["channels", "m3u_epg", "logos", "settings"])
@@ -104,6 +108,7 @@ class SetupHtmlTests(unittest.TestCase):
         for route in (
             "/api/config", "/api/test-storage", "/api/profile",
             "/api/profile/import", "/api/preview", "/api/import",
+            "/api/force-import",
             "/api/initialize", "/api/status", "/api/export", "/api/sftp/host-key",
             "/api/sftp/trust-host-key", "/api/sftp/private-key", "/api/bundle-info",
         ):

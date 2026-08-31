@@ -282,6 +282,16 @@ class Plugin:
             "button_label": "Import", "button_color": "red",
         },
         {
+            "id": "force_import_latest", "label": "Force import latest configuration",
+            "description": "Reapply only the current verified bundle to repair unprotected Follower drift.",
+            "button_label": "Force import", "button_color": "red",
+            "confirm": {
+                "required": True,
+                "title": "Force import current bundle?",
+                "message": "This reapplies the current verified Main bundle to unprotected Follower data. Older or changed bundles remain blocked.",
+            },
+        },
+        {
             "id": "start_service", "label": "Start background service",
             "description": "Start periodic export or follower import using the saved node configuration.",
             "button_label": "Start", "button_color": "green",
@@ -427,6 +437,10 @@ class Plugin:
                 result = engine.apply_latest()
                 result.setdefault("message", "Latest verified bundle imported")
                 return result
+            if action == "force_import_latest":
+                result = engine.apply_latest(force_reapply=True)
+                result.setdefault("message", "Current verified bundle force-reapplied")
+                return result
             if action == "acquire_vip":
                 result = engine.acquire_client_vip()
                 result.setdefault("message", "Client VIP acquired")
@@ -457,7 +471,8 @@ class Plugin:
                 "validate_config": "Configuration validation failed",
                 "test_storage": "Storage test failed",
                 "export_now": "Export failed", "preview_latest": "Import preview failed",
-                "import_latest": "Import failed", "start_service": "Service start failed",
+                "import_latest": "Import failed", "force_import_latest": "Force import failed",
+                "start_service": "Service start failed",
             }
             return validation_error_payload(exc, operation=labels.get(action, f"{action.replace('_', ' ').capitalize()} failed"))
 

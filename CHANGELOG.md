@@ -2,6 +2,11 @@
 
 All notable changes are documented here.
 
+## 0.8.1 — Development Preview
+
+- Followers can deliberately reapply their current verified Main bundle to
+  repair unprotected local drift without permitting an older or changed bundle.
+
 ## 0.8.0 — Development Preview
 
 - Version-2 signed bundles now replicate Stream and channel-group/account

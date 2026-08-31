@@ -165,7 +165,9 @@ class ReplicationEngine:
                 raise RuntimeError(f"Direct pull and shared-storage fallback failed; direct error: {direct_error}")
             raise
 
-    def verified_candidate(self, require_new: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
+    def verified_candidate(
+        self, require_new: bool = False, force_reapply: bool = False,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         envelope = self._load_candidate()
         payload = verify_envelope(envelope, self.config.shared_secret, self.config.cluster_id)
         if payload["source_node"] == self.config.node_id:
@@ -175,15 +177,20 @@ class ReplicationEngine:
             int(state.get("applied_sequence", 0)),
             int(state.get("exported_sequence", 0)),
         )
-        if require_new and payload["sequence"] <= known_sequence:
-            same_verified_payload = (
-                payload["sequence"] == int(state.get("applied_sequence", 0))
-                and envelope["payload_sha256"] == state.get("applied_hash")
-            )
-            changed_local_scope = (
-                state.get("applied_scope_fingerprint") != self._scope_fingerprint(self.config)
-            )
-            if not (same_verified_payload and changed_local_scope):
+        same_verified_payload = (
+            payload["sequence"] == int(state.get("applied_sequence", 0))
+            and envelope["payload_sha256"] == state.get("applied_hash")
+        )
+        same_local_scope = (
+            state.get("applied_scope_fingerprint") == self._scope_fingerprint(self.config)
+        )
+        if force_reapply:
+            if not (same_verified_payload and same_local_scope):
+                raise BundleNotNewerState(
+                    "Force reapply requires the exact bundle already applied for this Follower scope"
+                )
+        elif require_new and payload["sequence"] <= known_sequence:
+            if not (same_verified_payload and not same_local_scope):
                 raise BundleNotNewerState(
                     f"Bundle sequence {payload['sequence']} is not newer than local sequence {known_sequence}"
                 )
@@ -334,13 +341,15 @@ class ReplicationEngine:
             "scope": payload.get("scope", {"domains": list(scoped_config.domains), "core_setting_keys": list(scoped_config.core_setting_keys)}),
         }
 
-    def apply_latest(self) -> dict[str, Any]:
+    def apply_latest(self, force_reapply: bool = False) -> dict[str, Any]:
         if self.is_authoritative():
             raise ValueError("Only a follower may apply a peer bundle")
         grant_handoff: Mapping[str, Any] | None = None
         cold_takeover: Mapping[str, Any] | None = None
         with self.state_store.exclusive_lock():
-            envelope, payload = self.verified_candidate(require_new=True)
+            envelope, payload = self.verified_candidate(
+                require_new=not force_reapply, force_reapply=force_reapply,
+            )
             scoped_config = self.config_for_payload(payload)
             client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
             handoff = payload.get("handoff")
@@ -351,14 +360,14 @@ class ReplicationEngine:
                     raise ValueError("Handoff bundle targets a different node")
                 if handoff.get("phase") not in {"prepare", "grant", "cold_shutdown"}:
                     raise ValueError("Unsupported handoff phase")
-                if handoff.get("phase") == "grant":
+                if handoff.get("phase") == "grant" and not force_reapply:
                     state_before = self.state_store.read_state()
                     if handoff.get("prepare_hash") != state_before.get("applied_hash"):
                         raise ValueError("Handoff grant does not match the applied preparation bundle")
                     if payload["source_node"] != state_before.get("source_node"):
                         raise ValueError("Handoff grant source changed after preparation")
                     grant_handoff = handoff
-                if handoff.get("phase") == "cold_shutdown":
+                if handoff.get("phase") == "cold_shutdown" and not force_reapply:
                     if self.config.deployment_mode != "cold_standby":
                         raise ValueError("Cold-standby handoff received by an online node")
                     cold_takeover = handoff
@@ -367,6 +376,7 @@ class ReplicationEngine:
                 "sequence": payload["sequence"],
                 "source_node": payload["source_node"],
                 "client_identity": client_identity,
+                "forced_reapply": force_reapply,
             })
             if result["status"] == "applied":
                 self._remember_disabled_records(result)
@@ -385,7 +395,8 @@ class ReplicationEngine:
                 })
                 self.state_store.write_state(state)
                 self.logger.info(
-                    "Imported bundle (source=%s sequence=%s)",
+                    "%s bundle (source=%s sequence=%s)",
+                    "Force-reapplied" if force_reapply else "Imported",
                     payload["source_node"], payload["sequence"],
                 )
             else:
