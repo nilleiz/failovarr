@@ -21,6 +21,7 @@ from .config import (
     parse_protected_records,
 )
 from .domains import (
+    LIFECYCLE_FIELDS,
     apply_domains,
     export_domains,
     initialize_domains,
@@ -47,6 +48,10 @@ class OwnBundleState(ExpectedBundleState):
 
 class BundleNotNewerState(ExpectedBundleState):
     code = "not_newer"
+
+
+class LifecycleBundleUpgradeRequired(ValueError):
+    """A legacy snapshot cannot represent the selected lifecycle state."""
 
 
 class ReplicationEngine:
@@ -186,6 +191,12 @@ class ReplicationEngine:
 
     def config_for_payload(self, payload: Mapping[str, Any]) -> ReplicationConfig:
         """Validate bundle availability without replacing follower-local scope."""
+        lifecycle_domains = sorted(set(self.config.domains) & set(LIFECYCLE_FIELDS))
+        if payload.get("format") == 1 and lifecycle_domains:
+            raise LifecycleBundleUpgradeRequired(
+                "Bundle format 1 does not include the selected lifecycle domains "
+                f"({', '.join(lifecycle_domains)}). Upgrade Main and export a new format-2 bundle."
+            )
         scope = payload.get("scope")
         if scope is None:
             return self.config
@@ -263,6 +274,11 @@ class ReplicationEngine:
             }
         try:
             scoped = self.config_for_payload(payload)
+        except LifecycleBundleUpgradeRequired as exc:
+            return {
+                "status": "incompatible",
+                "message": str(exc),
+            }
         except ValueError:
             return {
                 "status": "incompatible",

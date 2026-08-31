@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 os.environ["FAILOVARR_NO_AUTOSTART"] = "1"
 
-from failovarr.bundle import create_envelope
+from failovarr.bundle import create_envelope, payload_hash, sign_payload
 from failovarr.config import CORE_SETTING_GROUPS, FULL_DOMAINS
 from failovarr.engine import ReplicationEngine
 
@@ -24,6 +24,17 @@ def settings(role="follower", **overrides):
     }
     result.update(overrides)
     return result
+
+
+def legacy_envelope(*, domains, scope):
+    envelope = create_envelope(
+        cluster_id="home", source_node="main", sequence=4,
+        domains=domains, scope=scope, secret="scope-test-secret",
+    )
+    envelope["payload"]["format"] = 1
+    envelope["payload_sha256"] = payload_hash(envelope["payload"])
+    envelope["signature"] = sign_payload(envelope["payload"], "scope-test-secret")
+    return envelope
 
 
 class EngineScopeTests(unittest.TestCase):
@@ -120,6 +131,39 @@ class EngineScopeTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "Export a new complete bundle from Main"):
             engine.config_for_payload(payload)
+
+    def test_legacy_bundle_without_lifecycle_scope_remains_compatible(self):
+        engine = ReplicationEngine(settings(domains="output_profiles", core_setting_keys=""))
+        envelope = legacy_envelope(
+            domains={"output_profiles": []},
+            scope={"domains": ["output_profiles"], "core_setting_keys": []},
+        )
+        payload = envelope["payload"]
+
+        self.assertEqual(engine.config_for_payload(payload).domains, ("output_profiles",))
+
+    def test_legacy_bundle_with_lifecycle_scope_requires_format_two_export(self):
+        for domain in ("streams", "channel_group_m3u_accounts"):
+            with self.subTest(domain=domain):
+                engine = ReplicationEngine(settings(domains=domain, core_setting_keys=""))
+                envelope = legacy_envelope(
+                    domains={domain: []},
+                    scope={"domains": [domain], "core_setting_keys": []},
+                )
+
+                with self.assertRaisesRegex(ValueError, "Upgrade Main and export a new format-2 bundle"):
+                    engine.config_for_payload(envelope["payload"])
+
+    def test_bundle_info_explains_lifecycle_format_upgrade(self):
+        engine = ReplicationEngine(settings(domains="streams", core_setting_keys=""))
+        engine._load_candidate = Mock(return_value=legacy_envelope(
+            domains={"streams": []},
+            scope={"domains": ["streams"], "core_setting_keys": []},
+        ))
+
+        info = engine.bundle_info()
+        self.assertEqual(info["status"], "incompatible")
+        self.assertIn("format-2 bundle", info["message"])
 
     def test_same_verified_bundle_can_be_reapplied_after_local_scope_change(self):
         engine = ReplicationEngine(settings())

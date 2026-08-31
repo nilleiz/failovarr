@@ -14,6 +14,7 @@ statuses aligned when changing it.
 
 ## Implemented, verification incomplete
 
+- **CORE-004** — Signed Stream availability lifecycle replication.
 - **HANDOFF-001** — Planned online handoff and plugin-managed Linux VIP; no witness/fencing proof.
 - **RECOVERY-001** — Production-like initialization and restore workflow; no independent full rollback proof.
 
