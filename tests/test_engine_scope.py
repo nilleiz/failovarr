@@ -228,7 +228,7 @@ class EngineScopeTests(unittest.TestCase):
             "applied_scope_fingerprint": engine._scope_fingerprint(engine.config),
         }
         engine.verified_candidate = Mock(return_value=(envelope, payload))
-        engine.state_store = Mock()
+        engine.state_store = MagicMock()
         engine.state_store.read_state.return_value = state
         engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
         with patch("failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch.object(
