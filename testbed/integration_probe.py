@@ -796,6 +796,40 @@ elif ACTION == "apply_lifecycle_verify":
         probe["assignment_unchanged"],
     )))
 
+elif ACTION == "force_reapply_lifecycle_verify":
+    # The bundle is current, but the passive node has drifted locally after its
+    # successful import. A normal replay remains rejected; force-reapply must
+    # converge the selected state without accepting another bundle identity.
+    Stream.objects.filter(pk=7309).update(is_stale=True, last_seen=LIFECYCLE_STALE_AT)
+    ChannelGroupM3UAccount.objects.filter(pk=7315).update(
+        is_stale=True, last_seen=LIFECYCLE_STALE_AT,
+    )
+    manager = configure("follower", graph_settings("follower"))
+    preview = manager.run_action(PLUGIN_KEY, "preview_latest")
+    normal_replay = manager.run_action(PLUGIN_KEY, "apply_latest")
+    forced = manager.run_action(PLUGIN_KEY, "force_import_latest")
+    stream = Stream.objects.get(pk=7309)
+    group_account = ChannelGroupM3UAccount.objects.get(pk=7315)
+    probe = {
+        "preview": preview,
+        "normal_replay": normal_replay,
+        "forced": forced,
+        "lifecycle_converged": (
+            stream.is_stale is False
+            and stream.last_seen == LIFECYCLE_MAIN_AT
+            and group_account.is_stale is False
+            and group_account.last_seen == LIFECYCLE_MAIN_AT
+        ),
+    }
+    emit(probe, all((
+        preview.get("status") == "preview",
+        preview.get("summary", {}).get("update") == 2,
+        normal_replay.get("status") == "error",
+        forced.get("status") == "applied",
+        forced.get("forced_reapply") is True,
+        probe["lifecycle_converged"],
+    )))
+
 elif ACTION == "recreate_channel_streams_main":
     upsert_without_signals(
         Stream,

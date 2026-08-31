@@ -43,7 +43,9 @@ setup port.
    password authentication is not used.
 4. Select the local import preset and any protected local records. Save.
 5. Refresh the latest bundle. A verified bundle can be previewed; a current
-   bundle is already applied and does not need importing again.
+   bundle is already applied. If unprotected selected data later drifts, preview
+   it first and use **Force import latest bundle** to deliberately reapply that
+   exact current bundle.
 
 ## First import
 

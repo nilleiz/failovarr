@@ -14,8 +14,12 @@ records and local overrides before a transaction changes Dispatcharr data.
 
 The Assistant labels a bundle as **current** when the same signed payload is
 already applied for the current Follower scope. Preview remains available;
-Import is disabled. If a scope change makes the same bundle applicable again,
-it is shown as verified.
+normal Import is disabled. If local data in the selected scope later drifts,
+preview it and use **Force import latest bundle** only after its confirmation.
+That action reapplies only the exact current signed payload and Follower scope;
+it cannot accept an older, changed or untrusted bundle and never repeats a
+Handoff or promotion. If a scope change makes the same bundle applicable again,
+it is shown as verified and normal Import applies it.
 
 ## 0.8.0 lifecycle-bundle upgrade
 

@@ -81,6 +81,7 @@ try {
     Invoke-Probe $slave "prepare_lifecycle_drift_slave"
     Invoke-Probe $main "export_lifecycle"
     Invoke-Probe $slave "apply_lifecycle_verify"
+    Invoke-Probe $slave "force_reapply_lifecycle_verify"
     Invoke-Probe $main "recreate_channel_streams_main"
     Invoke-Probe $slave "prepare_channel_stream_mirror_follower"
     Invoke-Probe $slave "apply_channel_stream_mirror_verify"

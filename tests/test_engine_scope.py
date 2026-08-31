@@ -183,6 +183,66 @@ class EngineScopeTests(unittest.TestCase):
         self.assertEqual(payload["sequence"], 4)
         self.assertEqual(engine.bundle_info()["status"], "verified")
 
+    def test_force_reapply_accepts_only_the_current_payload_and_scope(self):
+        engine = ReplicationEngine(settings())
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=4,
+            domains={"output_profiles": []}, secret="scope-test-secret",
+        )
+        engine._load_candidate = Mock(return_value=envelope)
+        engine.state_store = Mock()
+        engine.state_store.read_state.return_value = {
+            "applied_sequence": 4,
+            "exported_sequence": 0,
+            "applied_hash": envelope["payload_sha256"],
+            "applied_scope_fingerprint": engine._scope_fingerprint(engine.config),
+        }
+
+        _envelope, payload = engine.verified_candidate(force_reapply=True)
+        self.assertEqual(payload["sequence"], 4)
+
+        engine.state_store.read_state.return_value["applied_scope_fingerprint"] = "different-local-selection"
+        with self.assertRaisesRegex(ValueError, "Force reapply requires"):
+            engine.verified_candidate(force_reapply=True)
+
+        engine.state_store.read_state.return_value["applied_scope_fingerprint"] = engine._scope_fingerprint(engine.config)
+        engine.state_store.read_state.return_value["applied_hash"] = "different-payload"
+        with self.assertRaisesRegex(ValueError, "Force reapply requires"):
+            engine.verified_candidate(force_reapply=True)
+
+    def test_force_reapply_marks_the_result_without_replaying_handoff_effects(self):
+        engine = ReplicationEngine(settings())
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=4,
+            domains={"output_profiles": []}, secret="scope-test-secret",
+        )
+        payload = envelope["payload"]
+        payload["handoff"] = {
+            "phase": "grant", "source_node": "main", "target_node": "slave",
+            "prepare_hash": "prepared-payload",
+        }
+        state = {
+            "applied_sequence": 4,
+            "exported_sequence": 0,
+            "applied_hash": "prepared-payload",
+            "applied_scope_fingerprint": engine._scope_fingerprint(engine.config),
+        }
+        engine.verified_candidate = Mock(return_value=(envelope, payload))
+        engine.state_store = Mock()
+        engine.state_store.read_state.return_value = state
+        engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
+        with patch("failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch.object(
+            engine, "_remember_disabled_records",
+        ), patch.object(engine, "_accept_handoff_grant") as grant, patch.object(
+            engine, "_accept_cold_shutdown",
+        ) as cold:
+            result = engine.apply_latest(force_reapply=True)
+
+        self.assertEqual(result["status"], "applied")
+        self.assertTrue(result["forced_reapply"])
+        grant.assert_not_called()
+        cold.assert_not_called()
+
     def test_same_sequence_with_a_different_payload_remains_rejected(self):
         engine = ReplicationEngine(settings())
         envelope = create_envelope(

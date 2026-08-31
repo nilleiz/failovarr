@@ -1,3 +1,11 @@
+# 0.8.1 Follower force-reapply gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P801-01 | A passive Follower can repair local drift by deliberately reapplying its current verified Main bundle. | Accept force-reapply only for the exact applied sequence, payload hash and Follower scope; preserve transactional planning, client identity and local-protection rules. | Package tests and synthetic-cluster drift-repair scenario. | implemented; CI pending |
+| P801-02 | Force-reapply must not weaken replay or active/passive safety. | Reject older, changed, incompatible or untrusted bundles and authoritative nodes; do not process Handoff, promotion, VIP or cold-standby effects during a reapply. | Engine safety and Handoff regression tests. | implemented; CI pending |
+| P801-03 | Operators can invoke force-reapply intentionally without making normal replay an error-prone workflow. | Show a confirmed Setup Assistant control only for a current Follower bundle and provide an explicitly confirmed native plugin action. | Setup Assistant and plugin-action coverage. | implemented; CI pending |
+
 # 0.8.0 Stream lifecycle replication gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |
