@@ -242,8 +242,31 @@ class EngineScopeTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "applied")
         self.assertTrue(result["forced_reapply"])
+        self.assertEqual(state["last_import_bundle_created_at"], payload["created_at"])
         grant.assert_not_called()
         cold.assert_not_called()
+
+    def test_successful_import_records_the_signed_main_bundle_export_time(self):
+        engine = ReplicationEngine(settings())
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=4,
+            domains={"output_profiles": []}, secret="scope-test-secret",
+            created_at="2026-09-01T08:15:00+00:00",
+        )
+        payload = envelope["payload"]
+        state = {"applied_sequence": 3, "exported_sequence": 0}
+        engine.verified_candidate = Mock(return_value=(envelope, payload))
+        engine.state_store = MagicMock()
+        engine.state_store.read_state.return_value = state
+        engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
+        with patch("failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
+            "failovarr.engine.require_matching_client_identity", return_value={"status": "disabled"},
+        ), patch.object(engine, "_remember_disabled_records"):
+            result = engine.apply_latest()
+
+        self.assertEqual(result["status"], "applied")
+        self.assertEqual(state["last_import_bundle_created_at"], "2026-09-01T08:15:00+00:00")
+        self.assertIn("last_import_at", state)
 
     def test_same_sequence_with_a_different_payload_remains_rejected(self):
         engine = ReplicationEngine(settings())

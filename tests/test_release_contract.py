@@ -17,7 +17,7 @@ class ReleaseContractTests(unittest.TestCase):
     def test_manifest_points_to_versioned_release_asset_and_repository_docs(self):
         manifest = json.loads((ROOT / "failovarr" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "Failovarr")
-        self.assertEqual(manifest["version"], "0.8.1")
+        self.assertEqual(manifest["version"], "0.8.2")
         self.assertEqual(manifest["source_type"], "external")
         self.assertIn("releases/download/v{version}/failovarr-{version}.zip", manifest["source_url"])
         self.assertEqual(

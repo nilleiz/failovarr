@@ -392,6 +392,7 @@ class ReplicationEngine:
                     },
                     "applied_scope_fingerprint": self._scope_fingerprint(scoped_config),
                     "last_import_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "last_import_bundle_created_at": payload["created_at"],
                 })
                 self.state_store.write_state(state)
                 self.logger.info(
@@ -450,6 +451,7 @@ class ReplicationEngine:
                     },
                     "applied_scope_fingerprint": self._scope_fingerprint(scoped_config),
                     "last_import_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "last_import_bundle_created_at": payload["created_at"],
                 })
                 self.state_store.write_state(state)
         result.pop("domains", None)

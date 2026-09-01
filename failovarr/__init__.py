@@ -303,7 +303,7 @@ class Plugin:
         },
         {
             "id": "status", "label": "Replication status",
-            "description": "Show service health, the persisted sequence and the latest export/import result.",
+            "description": "Show service health, the persisted sequence, the latest import and its Main bundle export time.",
             "button_label": "Status", "button_color": "blue",
         },
         {
@@ -408,11 +408,13 @@ class Plugin:
                 state = result.get("state", {})
                 last_export = state.get("last_export_at") or "never"
                 last_import = state.get("last_import_at") or "never"
+                imported_bundle_exported_at = state.get("last_import_bundle_created_at") or "not recorded"
                 role_label = "Main" if result["role"] == "leader" else "Follower"
                 result["message"] = (
                     f"Node {result['node_id']} ({role_label}); replication service "
                     f"{'running' if result['service'].get('running') else 'stopped'}; "
-                    f"last export {last_export}; last import {last_import}."
+                    f"last export {last_export}; last import {last_import}; imported bundle exported at "
+                    f"{imported_bundle_exported_at}."
                 )
                 return result
 

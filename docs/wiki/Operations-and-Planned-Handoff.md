@@ -3,7 +3,8 @@
 ## Routine checks
 
 Use **Refresh replication status** to confirm node role, replication service,
-last export/import and sequence state. Main should export after relevant
+last export/import and sequence state. On Follower, confirm both the local
+import time and the Main-bundle export time. Main should export after relevant
 configuration changes. Follower status should show a verified or current Main
 bundle, never an unexplained storage error.
 

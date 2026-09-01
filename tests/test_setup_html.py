@@ -90,6 +90,12 @@ class SetupHtmlTests(unittest.TestCase):
         self.assertIn("/api/bundle-info", SETUP_HTML)
         self.assertIn("Stores sequences, hashes, replay/apply state", SETUP_HTML)
 
+    def test_follower_status_distinguishes_import_and_main_bundle_export_times(self):
+        self.assertIn("last_import_bundle_created_at", SETUP_HTML)
+        self.assertIn("Imported at", SETUP_HTML)
+        self.assertIn("Bundle exported at", SETUP_HTML)
+        self.assertIn("Not recorded", SETUP_HTML)
+
     def test_current_bundle_state_keeps_preview_but_disables_import(self):
         self.assertIn("x.status==='current'", SETUP_HTML)
         self.assertIn("Already up to date", SETUP_HTML)

@@ -1,3 +1,11 @@
+# 0.8.2 Follower import provenance gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P802-01 | A Follower status must distinguish when it imported data locally from when Main exported the imported bundle. | Persist the signed bundle `created_at` only after a successful normal, forced or initializing import alongside the local `last_import_at`; expose both values through status actions. | Engine import-state and status API tests. | implemented; CI pending |
+| P802-02 | Operators must see the two timestamps unambiguously in the Setup Assistant. | Render separate “Imported at” and “Bundle exported at” status metrics, retaining an explicit unavailable state for imports predating this feature. | Setup Assistant rendering contract and synthetic-cluster status assertion. | implemented; CI pending |
+| P802-03 | Bundle provenance timestamps remain trustworthy and do not alter replication semantics. | Validate signed ISO-8601 `created_at` values during envelope verification; preserve existing sequences, scope, planner and data graph behavior. | Bundle validation and full qualification tests. | implemented; CI pending |
+
 # 0.8.1 Follower force-reapply gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |

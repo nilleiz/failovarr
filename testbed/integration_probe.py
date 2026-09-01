@@ -948,14 +948,16 @@ elif ACTION == "initialize_core_scope_verify":
     scoped.update({"domains": "core_settings", "core_setting_keys": "stream_settings"})
     configure("follower", scoped)
     result = ReplicationEngine(scoped).initialize_follower()
+    state = ReplicationEngine(scoped).status()["state"]
     preserved = CoreSettings.objects.get(key="dvr_settings")
     stream = CoreSettings.objects.get(key="stream_settings")
     probe = {
         "initialized": result,
         "dvr_preserved": preserved.id == local_id and preserved.value == local_value,
         "stream_imported": stream.value == {"fixture": "main-stream"},
+        "bundle_export_time_recorded": bool(state.get("last_import_bundle_created_at")),
     }
-    emit(probe, result.get("status") == "initialized" and probe["dvr_preserved"] and probe["stream_imported"])
+    emit(probe, result.get("status") == "initialized" and probe["dvr_preserved"] and probe["stream_imported"] and probe["bundle_export_time_recorded"])
 
 elif ACTION == "serve_direct":
     # Remove the deliberately colliding record from the earlier conflict probe.
