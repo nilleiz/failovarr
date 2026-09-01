@@ -84,6 +84,7 @@ continuous follower polling is disabled there. Online mode additionally offers
 start import and periodic automatic import controls.
 
 The status action shows node role, service state, last export/import and known
-sequence information. Main offers **Save and export now**. Follower offers
+sequence information. After an import, Follower separately shows when it
+imported and when Main exported that signed bundle. Main offers **Save and export now**. Follower offers
 Refresh latest bundle, Preview, Import and the separately confirmed
 Initialization action.

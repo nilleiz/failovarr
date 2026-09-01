@@ -2,6 +2,11 @@
 
 All notable changes are documented here.
 
+## 0.8.2 — Development Preview
+
+- Follower status now shows both the local import time and the signed export
+  time of the Main bundle that was imported.
+
 ## 0.8.1 — Development Preview
 
 - Followers can deliberately reapply their current verified Main bundle to

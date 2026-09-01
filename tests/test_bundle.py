@@ -20,6 +20,26 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(payload["format"], BUNDLE_FORMAT)
         self.assertEqual(payload["domains"]["output_profiles"][0]["id"], 3)
 
+    def test_created_at_must_be_a_timezone_aware_iso_timestamp(self):
+        for created_at in ("not-a-time", "2026-08-13T12:00:00"):
+            with self.subTest(created_at=created_at):
+                envelope = create_envelope(
+                    cluster_id="home", source_node="main", sequence=7,
+                    domains={}, secret=self.secret, created_at=created_at,
+                )
+                with self.assertRaisesRegex(ValueError, "created_at"):
+                    verify_envelope(envelope, self.secret, "home")
+
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=7,
+            domains={}, secret=self.secret,
+        )
+        envelope["payload"]["created_at"] = ""
+        envelope["payload_sha256"] = payload_hash(envelope["payload"])
+        envelope["signature"] = sign_payload(envelope["payload"], self.secret)
+        with self.assertRaisesRegex(ValueError, "created_at"):
+            verify_envelope(envelope, self.secret, "home")
+
     def test_signed_legacy_format_remains_verifiable(self):
         envelope = create_envelope(
             cluster_id="home", source_node="main", sequence=7,

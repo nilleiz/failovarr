@@ -457,6 +457,25 @@ class NodeConfigTests(unittest.TestCase):
         self.assertEqual(result["status"], "applied")
         self.assertIn("reapplied", result["message"])
 
+    def test_follower_status_reports_local_import_and_main_bundle_export_times(self):
+        server = SetupServer({}, logging.getLogger("test"))
+        engine = Mock()
+        engine.status.return_value = {
+            "role": "follower", "node_id": "slave",
+            "state": {
+                "last_import_at": "2026-09-01T08:20:00+00:00",
+                "last_import_bundle_created_at": "2026-09-01T08:15:00+00:00",
+            },
+        }
+        with patch("failovarr.config.configuration_issues", return_value=[]), patch.object(
+            server, "_engine", return_value=engine,
+        ), patch("failovarr.autostart.service_is_running", return_value=True):
+            result = server.replication_status()
+
+        self.assertEqual(result["last_import_at"], "2026-09-01T08:20:00+00:00")
+        self.assertEqual(result["last_import_bundle_created_at"], "2026-09-01T08:15:00+00:00")
+        self.assertIn("imported bundle exported at 2026-09-01T08:15:00+00:00", result["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

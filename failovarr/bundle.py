@@ -74,6 +74,17 @@ def verify_envelope(envelope: Mapping[str, Any], secret: str, cluster_id: str) -
         raise ValueError("Bundle belongs to a different cluster")
     if not isinstance(payload.get("sequence"), int) or payload["sequence"] < 1:
         raise ValueError("Bundle sequence must be a positive integer")
+    created_at = payload.get("created_at")
+    if not isinstance(created_at, str) or not created_at:
+        raise ValueError("Bundle created_at must be an ISO-8601 timestamp")
+    try:
+        parsed_created_at = datetime.fromisoformat(
+            created_at[:-1] + "+00:00" if created_at.endswith("Z") else created_at
+        )
+    except ValueError as exc:
+        raise ValueError("Bundle created_at must be an ISO-8601 timestamp") from exc
+    if parsed_created_at.tzinfo is None or parsed_created_at.utcoffset() is None:
+        raise ValueError("Bundle created_at must include a timezone")
     if not isinstance(payload.get("domains"), dict):
         raise ValueError("Bundle domains must be an object")
     if "client_identity" in payload and not isinstance(payload["client_identity"], dict):
