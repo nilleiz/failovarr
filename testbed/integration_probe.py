@@ -924,10 +924,17 @@ elif ACTION == "apply_channel_stream_mirror_verify":
     )))
 
 elif ACTION == "prepare_core_scope_main":
-    CoreSettings.objects.update_or_create(
+    stream_settings, _created = CoreSettings.objects.update_or_create(
         key="stream_settings",
         defaults={"name": "Stream Settings", "value": {"fixture": "main-stream"}},
     )
+    main_value = dict(stream_settings.value or {})
+    main_value["fixture"] = "main-stream"
+    # Exercise Dispatcharr's effective empty default without encoding any
+    # particular user-selected key combination in this fixture.
+    main_value.pop("m3u_hash_key", None)
+    stream_settings.value = main_value
+    stream_settings.save(update_fields=["value"])
     CoreSettings.objects.update_or_create(
         key="dvr_settings",
         defaults={"name": "DVR Settings", "value": {"fixture": "main-dvr"}},
@@ -947,17 +954,39 @@ elif ACTION == "initialize_core_scope_verify":
     scoped = plugin_settings("follower")
     scoped.update({"domains": "core_settings", "core_setting_keys": "stream_settings"})
     configure("follower", scoped)
-    result = ReplicationEngine(scoped).initialize_follower()
-    state = ReplicationEngine(scoped).status()["state"]
+    follower_stream, _created = CoreSettings.objects.get_or_create(
+        key="stream_settings", defaults={"name": "Stream Settings", "value": {}},
+    )
+    follower_value = dict(follower_stream.value or {})
+    follower_value["m3u_hash_key"] = "url"
+    follower_stream.value = follower_value
+    follower_stream.save(update_fields=["value"])
+    CoreSettings.invalidate_group_cache("stream_settings")
+    engine = ReplicationEngine(scoped)
+    blocked = engine.initialize_follower()
+    adopted = engine.adopt_m3u_hash_key(blocked.get("payload_hash", ""))
+    result = engine.initialize_follower()
+    state = engine.status()["state"]
     preserved = CoreSettings.objects.get(key="dvr_settings")
     stream = CoreSettings.objects.get(key="stream_settings")
     probe = {
         "initialized": result,
+        "hash_key_conflict": blocked.get("reason") == "m3u_hash_key_mismatch",
+        "hash_key_adopted": adopted.get("status") == "adopted",
+        "effective_hash_key": CoreSettings.get_m3u_hash_key(),
         "dvr_preserved": preserved.id == local_id and preserved.value == local_value,
-        "stream_imported": stream.value == {"fixture": "main-stream"},
+        "stream_imported": stream.value.get("fixture") == "main-stream",
         "bundle_export_time_recorded": bool(state.get("last_import_bundle_created_at")),
     }
-    emit(probe, result.get("status") == "initialized" and probe["dvr_preserved"] and probe["stream_imported"] and probe["bundle_export_time_recorded"])
+    emit(probe, all((
+        result.get("status") == "initialized",
+        probe["hash_key_conflict"],
+        probe["hash_key_adopted"],
+        probe["effective_hash_key"] == "",
+        probe["dvr_preserved"],
+        probe["stream_imported"],
+        probe["bundle_export_time_recorded"],
+    )))
 
 elif ACTION == "serve_direct":
     # Remove the deliberately colliding record from the earlier conflict probe.
