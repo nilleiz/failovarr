@@ -231,7 +231,8 @@ class EngineScopeTests(unittest.TestCase):
         engine.state_store = MagicMock()
         engine.state_store.read_state.return_value = state
         engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
-        with patch("failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
+        with patch.object(engine, "_m3u_hash_key_conflict", return_value=None), patch(
+            "failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
             "failovarr.engine.require_matching_client_identity", return_value={"status": "disabled"},
         ), patch.object(
             engine, "_remember_disabled_records",
@@ -259,7 +260,8 @@ class EngineScopeTests(unittest.TestCase):
         engine.state_store = MagicMock()
         engine.state_store.read_state.return_value = state
         engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
-        with patch("failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
+        with patch.object(engine, "_m3u_hash_key_conflict", return_value=None), patch(
+            "failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
             "failovarr.engine.require_matching_client_identity", return_value={"status": "disabled"},
         ), patch.object(engine, "_remember_disabled_records"):
             result = engine.apply_latest()
@@ -267,6 +269,39 @@ class EngineScopeTests(unittest.TestCase):
         self.assertEqual(result["status"], "applied")
         self.assertEqual(state["last_import_bundle_created_at"], "2026-09-01T08:15:00+00:00")
         self.assertIn("last_import_at", state)
+
+    def test_preview_blocks_when_signed_main_hash_key_differs(self):
+        engine = ReplicationEngine(settings())
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=4,
+            domains={
+                "output_profiles": [],
+                "core_settings": [{
+                    "id": 1, "key": "stream_settings", "name": "Stream Settings",
+                    "value": {"m3u_hash_key": "future_key,name"},
+                }],
+            },
+            scope={"domains": ["output_profiles"], "core_setting_keys": []},
+            secret="scope-test-secret",
+        )
+        engine.verified_candidate = Mock(return_value=(envelope, envelope["payload"]))
+        with patch.object(engine, "_follower_m3u_hash_key", return_value="name"), patch(
+            "failovarr.engine.plan_domains"
+        ) as plan:
+            result = engine.preview_latest()
+
+        self.assertEqual(result["status"], "conflict")
+        self.assertEqual(result["reason"], "m3u_hash_key_mismatch")
+        self.assertEqual(result["main_m3u_hash_key"], "future_key,name")
+        self.assertEqual(result["follower_m3u_hash_key"], "name")
+        self.assertEqual(result["payload_hash"], envelope["payload_sha256"])
+        plan.assert_not_called()
+
+    def test_signed_main_hash_key_is_opaque_and_allows_empty_value(self):
+        payload = {"domains": {"core_settings": [{
+            "key": "stream_settings", "value": {"m3u_hash_key": ""},
+        }]}}
+        self.assertEqual(ReplicationEngine._main_m3u_hash_key(payload), "")
 
     def test_same_sequence_with_a_different_payload_remains_rejected(self):
         engine = ReplicationEngine(settings())

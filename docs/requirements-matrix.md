@@ -1,3 +1,12 @@
+# 0.8.3 M3U Hash Key parity gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P803-01 | A Follower must use Main's effective M3U Hash Key globally, regardless of its selected import scope. | Extract the exact signed `stream_settings.value.m3u_hash_key` string from every verified Main bundle and compare it byte-for-byte with the Follower setting before every preview, import, initialization, automatic apply and handoff path. | Engine parity and all-import-path regression tests. | implemented; CI pending |
+| P803-02 | A mismatch must never silently alter Follower data or settings. | Return an actionable `m3u_hash_key_mismatch` conflict containing the signed Main and local Follower values plus the bundle payload hash; automatic paths remain blocked. | Setup/API and background-path tests. | implemented; CI pending |
+| P803-03 | An operator can deliberately adopt only the trusted Main value and continue the exact requested import. | Bind confirmation to the verified payload hash; server-side code rereads the bundle, preserves every other `stream_settings` member, invalidates and verifies the CoreSettings cache, then imports only the same bundle. | Adoption, stale-confirmation and persistence tests. | implemented; CI pending |
+| P803-04 | Failovarr must not hardcode a currently selected Dispatcharr hash-key combination or trigger a destructive rehash race. | Treat the signed Main string as opaque, including empty and future values; do not queue Dispatcharr's stream-rehash task, because a replicated stream scope already imports Main's stream hashes. | Future-token, empty-value, no-rehash and stream-identity regressions. | implemented; CI pending |
+
 # 0.8.2 Follower import provenance gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |

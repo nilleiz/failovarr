@@ -21,6 +21,17 @@ it cannot accept an older, changed or untrusted bundle and never repeats a
 Handoff or promotion. If a scope change makes the same bundle applicable again,
 it is shown as verified and normal Import applies it.
 
+## M3U Hash Key parity
+
+Before every preview or import, Failovarr compares the Follower's global M3U
+Hash Key with the exact signed Main value. It is independent of the selected
+replication scope because Dispatcharr uses it for every periodic M3U update.
+On a mismatch, automatic replication stops with a conflict. The Assistant can
+adopt only the signed Main value after confirmation, binds that confirmation to
+the reviewed bundle hash, and retries that same import. It does not run
+Dispatcharr's destructive stream-rehash task: replicated streams already carry
+the authoritative Main hashes.
+
 ## 0.8.0 lifecycle-bundle upgrade
 
 Version 2 bundles carry the authoritative Stream and channel-group/account

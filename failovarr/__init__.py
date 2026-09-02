@@ -292,6 +292,16 @@ class Plugin:
             },
         },
         {
+            "id": "adopt_main_m3u_hash_key", "label": "Adopt Main M3U Hash Key",
+            "description": "Copy only the signed global M3U Hash Key from the latest verified Main bundle before retrying an import.",
+            "button_label": "Adopt Main key", "button_color": "red",
+            "confirm": {
+                "required": True,
+                "title": "Adopt Main M3U Hash Key?",
+                "message": "This changes the global Dispatcharr stream identifier setting on this Follower. Review the latest import conflict first, then retry the import.",
+            },
+        },
+        {
             "id": "start_service", "label": "Start background service",
             "description": "Start periodic export or follower import using the saved node configuration.",
             "button_label": "Start", "button_color": "green",
@@ -443,6 +453,10 @@ class Plugin:
                 result = engine.apply_latest(force_reapply=True)
                 result.setdefault("message", "Current verified bundle force-reapplied")
                 return result
+            if action == "adopt_main_m3u_hash_key":
+                result = engine.adopt_m3u_hash_key()
+                result.setdefault("message", "M3U Hash Key adopted from the latest verified Main bundle; retry the import.")
+                return result
             if action == "acquire_vip":
                 result = engine.acquire_client_vip()
                 result.setdefault("message", "Client VIP acquired")
@@ -474,6 +488,7 @@ class Plugin:
                 "test_storage": "Storage test failed",
                 "export_now": "Export failed", "preview_latest": "Import preview failed",
                 "import_latest": "Import failed", "force_import_latest": "Force import failed",
+                "adopt_main_m3u_hash_key": "M3U Hash Key adoption failed",
                 "start_service": "Service start failed",
             }
             return validation_error_payload(exc, operation=labels.get(action, f"{action.replace('_', ' ').capitalize()} failed"))

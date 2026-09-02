@@ -220,6 +220,7 @@ class SetupServer:
                         "/api/preview": lambda _body: owner.preview_latest(),
                         "/api/import": lambda _body: owner.import_latest(),
                         "/api/force-import": lambda _body: owner.force_import_latest(),
+                        "/api/adopt-m3u-hash-key": owner.adopt_m3u_hash_key,
                         "/api/initialize": owner.initialize_follower,
                     }
                     handler = handlers.get(path)
@@ -659,6 +660,16 @@ class SetupServer:
         result.setdefault("message", "Current verified Main bundle reapplied to repair Follower drift.")
         return result
 
+    def adopt_m3u_hash_key(self, body: dict[str, Any]) -> dict[str, Any]:
+        expected_hash = str(body.get("payload_hash", ""))
+        if not expected_hash:
+            raise ValueError("M3U Hash Key adoption requires the verified Main bundle hash")
+        if body.get("apply", False):
+            return self._engine().adopt_m3u_hash_key_and_apply(
+                expected_hash, force_reapply=bool(body.get("force_reapply", False)),
+            )
+        return self._engine().adopt_m3u_hash_key(expected_hash)
+
     def initialize_follower(self, body: dict[str, Any]) -> dict[str, Any]:
         config = ReplicationConfig.from_settings(self._database_settings())
         expected = f"INITIALIZE {config.node_id}"
@@ -743,9 +754,10 @@ async function refreshStatus(target,button){busy(button,true,'Refreshing…');tr
 document.querySelector('#refreshStatusLeader').onclick=function(){return refreshStatus('leaderStatus',this)};
 document.querySelector('#exportNow').onclick=async function(){const button=this;busy(button,true,'Saving…');try{await request('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});busy(button,true,'Exporting…');const x=await request('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});result('leaderStatus',x,x.status==='exported');await load()}catch(e){result('leaderStatus',e.message,false)}finally{busy(button,false)}};
 document.querySelector('#preview').onclick=async function(){busy(this,true,'Previewing…');try{const x=await request('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});result('importResult',x,x.status==='preview')}catch(e){result('importResult',e.message,false)}finally{busy(this,false)}};
-document.querySelector('#importLatest').onclick=async function(){let response;busy(this,true,'Importing…');try{response=await request('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});result('importResult',response,response.status==='applied'?'ok':response.status==='waiting'?'warn':'error');if(response.status==='waiting')await refreshBundleInfo()}catch(e){result('importResult',e.message,false)}finally{busy(this,false)}};
-document.querySelector('#forceImport').onclick=async function(){if(!confirm('Reapply the current verified Main bundle? This repairs unprotected Follower drift in the selected scope and does not accept an older or changed bundle.'))return;busy(this,true,'Reapplying…');try{const x=await request('/api/force-import',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});result('importResult',x,x.status==='applied'?'ok':'error');await refreshBundleInfo()}catch(e){result('importResult',e.message,false)}finally{busy(this,false)}};
+async function resolveM3UHashKeyConflict(response,force){if(response?.reason!=='m3u_hash_key_mismatch')return response;const main=response.main_m3u_hash_key||'(empty)',follower=response.follower_m3u_hash_key||'(empty)';if(!confirm(`M3U Hash Key must match Main for periodic stream availability updates.\n\nMain: ${main}\nFollower: ${follower}\n\nAdopt the signed Main value and continue this exact import?`))return response;return request('/api/adopt-m3u-hash-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload_hash:response.payload_hash,apply:true,force_reapply:!!force})})}
+document.querySelector('#importLatest').onclick=async function(){let response;busy(this,true,'Importing…');try{response=await request('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});response=await resolveM3UHashKeyConflict(response,false);result('importResult',response,response.status==='applied'?'ok':response.status==='waiting'?'warn':'error');if(response.status==='waiting')await refreshBundleInfo()}catch(e){result('importResult',e.message,false)}finally{busy(this,false)}};
+document.querySelector('#forceImport').onclick=async function(){if(!confirm('Reapply the current verified Main bundle? This repairs unprotected Follower drift in the selected scope and does not accept an older or changed bundle.'))return;busy(this,true,'Reapplying…');try{let x=await request('/api/force-import',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});x=await resolveM3UHashKeyConflict(x,true);result('importResult',x,x.status==='applied'?'ok':'error');await refreshBundleInfo()}catch(e){result('importResult',e.message,false)}finally{busy(this,false)}};
 document.querySelector('#refreshStatus').onclick=function(){return refreshStatus('replicationStatus',this)};
-document.querySelector('#initialize').onclick=async function(){const node=form.node_id.value,confirmation=prompt(`This replaces the selected follower data after creating a Dispatcharr backup.\n\nType exactly: INITIALIZE ${node}`);if(confirmation===null)return;busy(this,true,'Initializing…');try{const x=await request('/api/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation})});result('initializeResult',x,x.status==='initialized')}catch(e){result('initializeResult',e.message,false)}finally{busy(this,false)}};
+document.querySelector('#initialize').onclick=async function(){const node=form.node_id.value,confirmation=prompt(`This replaces the selected follower data after creating a Dispatcharr backup.\n\nType exactly: INITIALIZE ${node}`);if(confirmation===null)return;busy(this,true,'Initializing…');try{let x=await request('/api/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation})});if(x?.reason==='m3u_hash_key_mismatch'){const main=x.main_m3u_hash_key||'(empty)',follower=x.follower_m3u_hash_key||'(empty)';if(confirm(`M3U Hash Key must match Main before initialization.\n\nMain: ${main}\nFollower: ${follower}\n\nAdopt the signed Main value and continue?`)){await request('/api/adopt-m3u-hash-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload_hash:x.payload_hash})});x=await request('/api/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation})})}}result('initializeResult',x,x.status==='initialized')}catch(e){result('initializeResult',e.message,false)}finally{busy(this,false)}};
 load().catch(e=>result('saveResult',e.message,false));
 </script></body></html>'''

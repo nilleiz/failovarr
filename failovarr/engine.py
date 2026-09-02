@@ -54,6 +54,10 @@ class LifecycleBundleUpgradeRequired(ValueError):
     """A legacy snapshot cannot represent the selected lifecycle state."""
 
 
+class M3UHashKeyConflict(ValueError):
+    """The global Follower hash-key setting differs from signed Main state."""
+
+
 class ReplicationEngine:
     def __init__(self, settings: Mapping[str, Any], logger: logging.Logger | None = None):
         self.raw_settings = dict(settings)
@@ -231,6 +235,127 @@ class ReplicationEngine:
         return self.config
 
     @staticmethod
+    def _main_m3u_hash_key(payload: Mapping[str, Any]) -> str:
+        """Return Main's opaque, signed global M3U hash-key setting.
+
+        Failovarr deliberately does not interpret or enumerate Dispatcharr's
+        selectable fields.  The exact serialized value is Main's authority and
+        remains forward compatible with future Dispatcharr choices.
+        """
+        domains = payload.get("domains")
+        if not isinstance(domains, Mapping):
+            raise M3UHashKeyConflict(
+                "The verified Main bundle has no Settings domain. Export a fresh complete bundle from Main."
+            )
+        settings = domains.get("core_settings")
+        if not isinstance(settings, list):
+            raise M3UHashKeyConflict(
+                "The verified Main bundle has no stream settings. Export a fresh complete bundle from Main."
+            )
+        for row in settings:
+            if not isinstance(row, Mapping) or row.get("key") != "stream_settings":
+                continue
+            value = row.get("value")
+            if isinstance(value, Mapping) and isinstance(value.get("m3u_hash_key"), str):
+                return value["m3u_hash_key"]
+            break
+        raise M3UHashKeyConflict(
+            "The verified Main bundle has no valid M3U Hash Key. Save the setting on Main and export a fresh bundle."
+        )
+
+    @staticmethod
+    def _follower_m3u_hash_key() -> str:
+        from core.models import CoreSettings
+
+        value = CoreSettings.get_m3u_hash_key()
+        if not isinstance(value, str):
+            raise M3UHashKeyConflict(
+                "The local M3U Hash Key is invalid. Save a valid setting in Dispatcharr before importing."
+            )
+        return value
+
+    def _m3u_hash_key_conflict(
+        self, envelope: Mapping[str, Any], payload: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        main_value = self._main_m3u_hash_key(payload)
+        follower_value = self._follower_m3u_hash_key()
+        if main_value == follower_value:
+            return None
+        return {
+            "status": "conflict",
+            "reason": "m3u_hash_key_mismatch",
+            "sequence": payload["sequence"],
+            "source_node": payload["source_node"],
+            "payload_hash": envelope["payload_sha256"],
+            "main_m3u_hash_key": main_value,
+            "follower_m3u_hash_key": follower_value,
+            "message": (
+                "M3U Hash Key differs from Main. It must match exactly because "
+                "Dispatcharr uses it during periodic M3U updates to identify available streams. "
+                "Adopt the signed Main setting, then retry this exact bundle."
+            ),
+        }
+
+    @staticmethod
+    def _require_expected_payload_hash(envelope: Mapping[str, Any], expected_hash: str) -> None:
+        if not expected_hash or envelope.get("payload_sha256") != expected_hash:
+            raise M3UHashKeyConflict(
+                "The Main bundle changed after confirmation. Review the new M3U Hash Key and confirm again."
+            )
+
+    def adopt_m3u_hash_key(self, expected_payload_hash: str = "") -> dict[str, Any]:
+        """Persist only the signed Main hash-key value without queuing a rehash."""
+        if self.is_authoritative():
+            raise ValueError("Only a follower may adopt a peer M3U Hash Key")
+        with self.state_store.exclusive_lock():
+            envelope, payload = self.verified_candidate(require_new=False)
+            if expected_payload_hash:
+                self._require_expected_payload_hash(envelope, expected_payload_hash)
+            main_value = self._main_m3u_hash_key(payload)
+            from django.db import transaction
+            from core.models import CoreSettings
+
+            with transaction.atomic():
+                setting, _created = CoreSettings.objects.get_or_create(
+                    key="stream_settings",
+                    defaults={"name": "Stream Settings", "value": {}},
+                )
+                current = setting.value if isinstance(setting.value, Mapping) else {}
+                value = dict(current)
+                value["m3u_hash_key"] = main_value
+                setting.value = value
+                setting.save(update_fields=["value"])
+                CoreSettings.invalidate_group_cache("stream_settings")
+                if CoreSettings.get_m3u_hash_key() != main_value:
+                    raise RuntimeError("M3U Hash Key readback did not match the signed Main value")
+        return {
+            "status": "adopted",
+            "sequence": payload["sequence"],
+            "source_node": payload["source_node"],
+            "payload_hash": envelope["payload_sha256"],
+            "main_m3u_hash_key": main_value,
+            "message": "M3U Hash Key now exactly matches the signed Main bundle. No stream rehash was queued.",
+        }
+
+    def adopt_m3u_hash_key_and_apply(
+        self, expected_payload_hash: str, force_reapply: bool = False,
+    ) -> dict[str, Any]:
+        """Adopt a confirmed value, then apply only that same verified bundle."""
+        adopted = self.adopt_m3u_hash_key(expected_payload_hash)
+        result = self.apply_latest(
+            force_reapply=force_reapply,
+            expected_payload_hash=expected_payload_hash,
+        )
+        result["m3u_hash_key_adopted"] = True
+        result["m3u_hash_key_payload_hash"] = adopted["payload_hash"]
+        if result.get("status") != "applied":
+            result.setdefault(
+                "message",
+                "M3U Hash Key was aligned with Main, but the import remains blocked for a separate reason.",
+            )
+        return result
+
+    @staticmethod
     def _selected_payload_domains(payload: Mapping[str, Any], config: ReplicationConfig) -> dict[str, Any]:
         domains = payload.get("domains")
         if not isinstance(domains, Mapping):
@@ -329,8 +454,11 @@ class ReplicationEngine:
         }
 
     def preview_latest(self) -> dict[str, Any]:
-        _envelope, payload = self.verified_candidate(require_new=False)
+        envelope, payload = self.verified_candidate(require_new=False)
         scoped_config = self.config_for_payload(payload)
+        mismatch = self._m3u_hash_key_conflict(envelope, payload)
+        if mismatch:
+            return mismatch
         client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
         plans = plan_domains(self._selected_payload_domains(payload, scoped_config), scoped_config)
         return {
@@ -341,7 +469,9 @@ class ReplicationEngine:
             "scope": payload.get("scope", {"domains": list(scoped_config.domains), "core_setting_keys": list(scoped_config.core_setting_keys)}),
         }
 
-    def apply_latest(self, force_reapply: bool = False) -> dict[str, Any]:
+    def apply_latest(
+        self, force_reapply: bool = False, expected_payload_hash: str = "",
+    ) -> dict[str, Any]:
         if self.is_authoritative():
             raise ValueError("Only a follower may apply a peer bundle")
         grant_handoff: Mapping[str, Any] | None = None
@@ -350,7 +480,12 @@ class ReplicationEngine:
             envelope, payload = self.verified_candidate(
                 require_new=not force_reapply, force_reapply=force_reapply,
             )
+            if expected_payload_hash:
+                self._require_expected_payload_hash(envelope, expected_payload_hash)
             scoped_config = self.config_for_payload(payload)
+            mismatch = self._m3u_hash_key_conflict(envelope, payload)
+            if mismatch:
+                return mismatch
             client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
             handoff = payload.get("handoff")
             if handoff is not None:
@@ -422,6 +557,9 @@ class ReplicationEngine:
         with self.state_store.exclusive_lock():
             envelope, payload = self.verified_candidate(require_new=True)
             scoped_config = self.config_for_payload(payload)
+            mismatch = self._m3u_hash_key_conflict(envelope, payload)
+            if mismatch:
+                return mismatch
             client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
 
             # Dispatcharr's own full-backup service is deliberately called
