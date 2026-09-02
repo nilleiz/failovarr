@@ -31,6 +31,21 @@ class PluginMigrationTests(unittest.TestCase):
         engine.apply_latest.assert_called_once_with(force_reapply=True)
         self.assertTrue(result["forced_reapply"])
 
+    def test_adopt_main_m3u_hash_key_action_is_explicitly_confirmed(self):
+        action = next(item for item in failovarr.Plugin.actions if item["id"] == "adopt_main_m3u_hash_key")
+        self.assertEqual(action["button_color"], "red")
+        self.assertTrue(action["confirm"]["required"])
+
+        engine = Mock()
+        engine.adopt_m3u_hash_key.return_value = {"status": "adopted"}
+        plugin = failovarr.Plugin()
+        with patch.object(failovarr, "effective_settings", return_value={}), patch.object(
+            failovarr, "ReplicationEngine", return_value=engine,
+        ):
+            result = plugin.run("adopt_main_m3u_hash_key", {}, {"settings": {}})
+        engine.adopt_m3u_hash_key.assert_called_once_with()
+        self.assertEqual(result["status"], "adopted")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -115,10 +115,17 @@ class SetupHtmlTests(unittest.TestCase):
             "/api/config", "/api/test-storage", "/api/profile",
             "/api/profile/import", "/api/preview", "/api/import",
             "/api/force-import",
+            "/api/adopt-m3u-hash-key",
             "/api/initialize", "/api/status", "/api/export", "/api/sftp/host-key",
             "/api/sftp/trust-host-key", "/api/sftp/private-key", "/api/bundle-info",
         ):
             self.assertIn(route, SETUP_HTML)
+
+    def test_import_can_confirm_the_signed_main_hash_key_without_sending_a_value(self):
+        self.assertIn("resolveM3UHashKeyConflict", SETUP_HTML)
+        self.assertIn("m3u_hash_key_mismatch", SETUP_HTML)
+        self.assertIn("payload_hash:response.payload_hash", SETUP_HTML)
+        self.assertNotIn("main_m3u_hash_key:response", SETUP_HTML)
 
     def test_readiness_fails_closed_when_its_runtime_check_errors(self):
         server = SetupServer({}, logging.getLogger("test"))

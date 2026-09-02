@@ -2,6 +2,12 @@
 
 All notable changes are documented here.
 
+## 0.8.3 — Development Preview
+
+- A Follower now blocks every import path when its global M3U Hash Key differs
+  from the signed Main setting, and can deliberately adopt that exact value
+  before retrying the same bundle.
+
 ## 0.8.2 — Development Preview
 
 - Follower status now shows both the local import time and the signed export
