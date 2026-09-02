@@ -281,7 +281,7 @@ class EngineScopeTests(unittest.TestCase):
                     "value": {"m3u_hash_key": "future_key,name"},
                 }],
             },
-            scope={"domains": ["output_profiles"], "core_setting_keys": []},
+            scope={"domains": ["output_profiles"], "core_setting_keys": ["stream_settings"]},
             secret="scope-test-secret",
         )
         engine.verified_candidate = Mock(return_value=(envelope, envelope["payload"]))
@@ -300,6 +300,12 @@ class EngineScopeTests(unittest.TestCase):
     def test_signed_main_hash_key_is_opaque_and_allows_empty_value(self):
         payload = {"domains": {"core_settings": [{
             "key": "stream_settings", "value": {"m3u_hash_key": ""},
+        }]}}
+        self.assertEqual(ReplicationEngine._main_m3u_hash_key(payload), "")
+
+    def test_unsigned_dispatcharr_default_is_an_empty_effective_hash_key(self):
+        payload = {"domains": {"core_settings": [{
+            "key": "stream_settings", "value": {"default_output_format": "mpegts"},
         }]}}
         self.assertEqual(ReplicationEngine._main_m3u_hash_key(payload), "")
 

@@ -256,8 +256,14 @@ class ReplicationEngine:
             if not isinstance(row, Mapping) or row.get("key") != "stream_settings":
                 continue
             value = row.get("value")
-            if isinstance(value, Mapping) and isinstance(value.get("m3u_hash_key"), str):
-                return value["m3u_hash_key"]
+            if isinstance(value, Mapping):
+                # Dispatcharr's effective default is an empty value, but its
+                # persisted stream_settings JSON does not necessarily contain
+                # the key until an operator saves this form once.
+                if "m3u_hash_key" not in value:
+                    return ""
+                if isinstance(value["m3u_hash_key"], str):
+                    return value["m3u_hash_key"]
             break
         raise M3UHashKeyConflict(
             "The verified Main bundle has no valid M3U Hash Key. Save the setting on Main and export a fresh bundle."
