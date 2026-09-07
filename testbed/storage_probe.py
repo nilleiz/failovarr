@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import posixpath
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
 from failovarr.bundle import create_envelope
-from failovarr.remote_storage import create_bundle_store
+from failovarr.remote_storage import _bundle_name, _encoded, create_bundle_store
 
 
 SECRET = "storage-lab-shared-secret-32-characters"
@@ -61,6 +63,53 @@ except s3_store.client.exceptions.BucketAlreadyOwnedByYou:
     pass
 
 base_sequence = int(time.time()) * 10
+sftp_empty_settings = config(
+    "sftp", "sftp://storage-sftp:22", f"upload/empty-{base_sequence}",
+    "lab", "lab-sftp-password", {"known_hosts_path": str(known_hosts)},
+)
+try:
+    create_bundle_store(sftp_empty_settings).read_latest()
+    sftp_empty_is_missing = False
+except FileNotFoundError:
+    sftp_empty_is_missing = True
+
+sftp_orphan_settings = config(
+    "sftp", "sftp://storage-sftp:22", f"upload/orphan-{base_sequence}",
+    "lab", "lab-sftp-password", {"known_hosts_path": str(known_hosts)},
+)
+orphan_envelope = create_envelope(
+    cluster_id="storage-lab",
+    source_node="lab-main",
+    sequence=base_sequence + 30,
+    domains={"output_profiles": [{"id": base_sequence + 30, "name": "orphan"}]},
+    secret=SECRET,
+)
+
+
+async def publish_orphaned_sftp_bundle():
+    # Deliberately omit latest.json to model an interruption after Main's
+    # immutable bundle publication. The Follower must recover this envelope.
+    import asyncssh
+
+    client = await asyncssh.connect(
+        "storage-sftp", port=22, username="lab", password="lab-sftp-password",
+        known_hosts=str(known_hosts),
+    )
+    try:
+        async with client.start_sftp_client() as sftp:
+            base = "/" + sftp_orphan_settings.storage_container
+            bundles = posixpath.join(base, "bundles")
+            await sftp.makedirs(bundles, exist_ok=True)
+            async with sftp.open(posixpath.join(base, _bundle_name(orphan_envelope)), "wb") as handle:
+                await handle.write(_encoded(orphan_envelope))
+    finally:
+        client.close()
+        await client.wait_closed()
+
+
+asyncio.run(publish_orphaned_sftp_bundle())
+sftp_orphan_recovered = create_bundle_store(sftp_orphan_settings).read_latest() == orphan_envelope
+
 results = {
     "webdav": round_trip("webdav", config(
         "webdav", "http://storage-webdav:8080", "redundancy",
@@ -71,6 +120,8 @@ results = {
         "sftp", "sftp://storage-sftp:22", "upload/redundancy",
         "lab", "lab-sftp-password", {"known_hosts_path": str(known_hosts)},
     ), base_sequence + 3),
+    "sftp_empty": sftp_empty_is_missing,
+    "sftp_orphan": sftp_orphan_recovered,
     "smb": round_trip("smb", config(
         "smb", "smb://storage-smb:445", "redundancy/dispatcharr",
         "lab", "lab-smb-password", {"require_encryption": True},

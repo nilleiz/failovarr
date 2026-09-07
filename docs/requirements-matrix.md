@@ -1,3 +1,11 @@
+# 0.8.4 SFTP pointer recovery gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P804-01 | A missing SFTP `latest.json` pointer with no completed bundles is an expected empty-storage state, not a replication failure. | Return a sanitized successful missing result from the SFTP helper and translate it to `FileNotFoundError` in the store adapter. | Package and synthetic-storage empty-path regressions. | implemented; CI pending |
+| P804-02 | A Follower must safely recover a completed Main bundle when SFTP pointer publication was interrupted after immutable bundle publication. | On a missing pointer or missing pointer target, select the lexicographically newest completed immutable bundle; normal signature, cluster and replay checks remain unchanged. | Package fallback tests and synthetic-storage orphan-pointer scenario. | implemented; CI pending |
+| P804-03 | Main must never report an SFTP export as successful unless the published pointer resolves to the exact envelope it wrote. | Read back `latest.json` and its referenced bundle after pointer publication and compare the complete envelope before returning success. | Package write read-back and mismatch regressions plus synthetic storage round trip. | implemented; CI pending |
+
 # 0.8.3 M3U Hash Key parity gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |

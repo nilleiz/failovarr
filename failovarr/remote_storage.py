@@ -303,7 +303,8 @@ class SftpBundleStore:
                 "read_request", "prepare_dependencies", "dispatch", "connect",
                 "start_sftp_client", "ensure_bundles_directory",
                 "ensure_temporary_directory", "write_bundle", "publish_bundle",
-                "write_pointer", "publish_pointer", "prune_bundles", "read_pointer", "read_bundle",
+                "write_pointer", "publish_pointer", "verify_pointer", "verify_bundle", "prune_bundles",
+                "read_pointer", "read_bundle", "list_completed_bundles", "read_fallback_bundle",
                 "ensure_test_directory", "write_test_file", "publish_test_file",
                 "read_test_file", "remove_test_file", "read_host_key",
             }
@@ -320,6 +321,8 @@ class SftpBundleStore:
 
     def read_latest(self) -> dict[str, Any]:
         result = self._run("read")
+        if result.get("missing") is True:
+            raise FileNotFoundError("SFTP storage contains no completed bundle")
         envelope = result.get("envelope")
         if not isinstance(envelope, dict):
             raise RuntimeError("SFTP helper did not return a bundle")

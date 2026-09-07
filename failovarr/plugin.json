@@ -1,6 +1,6 @@
 {
   "name": "Failovarr",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Development Preview: signed active/passive Dispatcharr configuration replication with node-local overrides",
   "license": "MIT",
   "author": "nilleiz",

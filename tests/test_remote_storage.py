@@ -55,6 +55,16 @@ class SftpSubprocessTests(unittest.TestCase):
 
     @patch("failovarr.remote_storage.ensure_vendor_dependencies")
     @patch("failovarr.remote_storage.subprocess.run")
+    def test_read_empty_sftp_location_is_missing_not_runtime_error(self, run, _ensure):
+        run.return_value = subprocess.CompletedProcess(
+            [], 0, json.dumps({"status": "success", "result": {"missing": True}}), "",
+        )
+
+        with self.assertRaises(FileNotFoundError):
+            SftpBundleStore(self.config()).read_latest()
+
+    @patch("failovarr.remote_storage.ensure_vendor_dependencies")
+    @patch("failovarr.remote_storage.subprocess.run")
     def test_host_key_inspection_uses_isolated_helper(self, run, _ensure):
         run.return_value = subprocess.CompletedProcess(
             [], 0,
@@ -80,6 +90,22 @@ class SftpSubprocessTests(unittest.TestCase):
         ) as caught:
             SftpBundleStore(self.config()).read_latest()
         self.assertNotIn("secret diagnostic", str(caught.exception))
+
+    @patch("failovarr.remote_storage.ensure_vendor_dependencies")
+    @patch("failovarr.remote_storage.subprocess.run")
+    def test_publish_readback_failure_keeps_its_safe_stage(self, run, _ensure):
+        run.return_value = subprocess.CompletedProcess(
+            [], 1,
+            '{"status":"error","error_type":"RuntimeError","error_stage":"verify_bundle"}',
+            "storage endpoint and credentials must not leak",
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"SFTP helper failed \(RuntimeError at verify_bundle\)",
+        ) as caught:
+            SftpBundleStore(self.config()).write_latest({"payload": {"sequence": 1}, "payload_sha256": "abc"})
+        self.assertNotIn("storage endpoint", str(caught.exception))
 
 
 if __name__ == "__main__":

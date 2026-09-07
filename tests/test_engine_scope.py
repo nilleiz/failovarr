@@ -90,6 +90,15 @@ class EngineScopeTests(unittest.TestCase):
         self.assertEqual(info["status"], "own_bundle")
         self.assertIn("different Follower node name", info["message"])
 
+    def test_bundle_info_reports_missing_when_storage_has_no_bundle(self):
+        engine = ReplicationEngine(settings())
+        engine._load_candidate = Mock(side_effect=FileNotFoundError)
+
+        info = engine.bundle_info()
+
+        self.assertEqual(info["status"], "missing")
+        self.assertIn("No Main bundle", info["message"])
+
     def test_bundle_info_reports_current_when_payload_and_scope_are_applied(self):
         engine = ReplicationEngine(settings())
         envelope = create_envelope(
