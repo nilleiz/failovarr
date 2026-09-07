@@ -27,6 +27,12 @@ click **Trust fetched key**. The known-hosts file must be writable by the
 Dispatcharr container user. Password or imported client-private-key
 authentication may be used; private keys are never mirrored to native settings.
 
+Both Main and Follower must use the same SFTP server, account and storage
+directory. An empty location means no Main bundle has been published there yet.
+If Main completed an immutable bundle write but its `latest.json` pointer was
+interrupted, the Follower safely selects the newest completed signed bundle;
+normal signature and replay checks still apply.
+
 ## Retention and recovery
 
 Bundle retention defaults to three. A missing, unreachable, invalid or

@@ -2,6 +2,14 @@
 
 All notable changes are documented here.
 
+## 0.8.4 — Development Preview
+
+- SFTP storage now treats an empty bundle location as an expected "no Main
+  bundle" state instead of an internal runtime error.
+- A Follower can recover the newest complete signed SFTP bundle when only its
+  `latest.json` pointer is missing, and Main verifies that its pointer resolves
+  to the exact published envelope before reporting export success.
+
 ## 0.8.3 — Development Preview
 
 - A Follower now blocks every import path when its global M3U Hash Key differs

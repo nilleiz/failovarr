@@ -90,6 +90,18 @@ async def _write(connection: dict, envelope: dict) -> dict:
                 await handle.write(_encoded({"object": final_name}))
             stage = "publish_pointer"
             await sftp.posix_rename(pointer_temp, posixpath.join(base, "latest.json"))
+            # A Main export is only complete once readers can resolve its
+            # pointer to the exact immutable envelope it just published.
+            # This catches servers which acknowledge a rename before making
+            # the new object consistently readable.
+            stage = "verify_pointer"
+            async with sftp.open(posixpath.join(base, "latest.json"), "rb") as handle:
+                published_pointer = _decoded(await handle.read())
+            stage = "verify_bundle"
+            async with sftp.open(posixpath.join(base, str(published_pointer["object"])), "rb") as handle:
+                published_envelope = _decoded(await handle.read())
+            if published_envelope != envelope:
+                raise RuntimeError("SFTP publish readback did not match the written bundle")
             stage = "prune_bundles"
             entries = await sftp.glob(posixpath.join(base, "bundles", "*.json"))
             for entry in sorted(str(item) for item in entries)[:-3]:
@@ -104,6 +116,8 @@ async def _write(connection: dict, envelope: dict) -> dict:
 
 
 async def _read(connection: dict) -> dict:
+    import asyncssh
+
     client = None
     stage = "connect"
     try:
@@ -111,12 +125,28 @@ async def _read(connection: dict) -> dict:
         stage = "start_sftp_client"
         async with client.start_sftp_client() as sftp:
             base = str(connection["base"])
-            stage = "read_pointer"
-            async with sftp.open(posixpath.join(base, "latest.json"), "rb") as handle:
-                pointer = _decoded(await handle.read())
-            stage = "read_bundle"
-            async with sftp.open(posixpath.join(base, str(pointer["object"])), "rb") as handle:
-                envelope = _decoded(await handle.read())
+            try:
+                stage = "read_pointer"
+                async with sftp.open(posixpath.join(base, "latest.json"), "rb") as handle:
+                    pointer = _decoded(await handle.read())
+                stage = "read_bundle"
+                async with sftp.open(posixpath.join(base, str(pointer["object"])), "rb") as handle:
+                    envelope = _decoded(await handle.read())
+            except asyncssh.SFTPNoSuchFile:
+                # Immutable bundle names sort by their zero-padded sequence.
+                # A missing pointer can happen when Main wrote a complete
+                # bundle but was interrupted before pointer publication.
+                stage = "list_completed_bundles"
+                try:
+                    entries = await sftp.glob(posixpath.join(base, "bundles", "*.json"))
+                except asyncssh.SFTPNoSuchFile:
+                    return {"missing": True}
+                completed = sorted(str(entry) for entry in entries)
+                if not completed:
+                    return {"missing": True}
+                stage = "read_fallback_bundle"
+                async with sftp.open(completed[-1], "rb") as handle:
+                    envelope = _decoded(await handle.read())
         return {"envelope": envelope}
     except Exception as exc:
         raise StagedSftpError(stage, exc) from exc
