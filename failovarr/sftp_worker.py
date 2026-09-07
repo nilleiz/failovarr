@@ -116,6 +116,8 @@ async def _write(connection: dict, envelope: dict) -> dict:
 
 
 async def _read(connection: dict) -> dict:
+    import asyncssh
+
     client = None
     stage = "connect"
     try:
