@@ -2,6 +2,18 @@
 
 All notable changes are documented here.
 
+## 0.8.5 — Development Preview
+
+- Version-3 bundles encrypt Dispatcharr user accounts, API keys, password hashes
+  and account relationships with AES-GCM using a key derived from the cluster
+  secret.
+- Followers can select Main users and choose to follow Main's active state or
+  force each imported user active or inactive. New Main users are selected by
+  default; local-only users are preserved and never block imports.
+- Replaced the global client-identity mismatch check with transactional
+  username-based user reconciliation that retains local primary keys.
+- Followers continue to accept bundle formats 1 and 2 without user changes.
+
 ## 0.8.4 — Development Preview
 
 - SFTP storage now treats an empty bundle location as an expected "no Main

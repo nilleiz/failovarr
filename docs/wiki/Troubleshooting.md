@@ -40,13 +40,20 @@ current authority and investigate unexpected promotion or state loss.
 
 An upgraded Follower selected Stream or channel-group/account replication, but
 Main still exported a pre-0.8.0 bundle. Upgrade Main, export a fresh format-2
-bundle, then preview it again. Do not reset the Follower or manually clear
-stale Streams: the normal import updates the signed lifecycle fields.
+or later bundle, then preview it again. Do not reset the Follower or manually
+clear stale Streams: the normal import updates the signed lifecycle fields.
 
-**Client identity mismatch**
+**Main users are unavailable for selection**
 
-Client-relevant IPTV user settings differ. Align them manually; passwords and
-API keys are intentionally not copied.
+The bundle predates format 3 or its encrypted user section cannot be verified.
+Update the Follower first, then update Main and export a fresh bundle. Formats
+1 and 2 still import other selected data but do not change Dispatcharr users.
+
+**A user import reports missing dependencies**
+
+Check that every referenced Group, Permission and selected Channel Profile
+exists on the Follower or is included in the selected Main import. Failovarr
+validates selected user relationships before changing data.
 
 **ID has different natural key / record is locked**
 

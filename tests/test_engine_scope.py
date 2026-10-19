@@ -38,6 +38,11 @@ def legacy_envelope(*, domains, scope):
 
 
 class EngineScopeTests(unittest.TestCase):
+    def test_legacy_bundle_formats_skip_user_import_data(self):
+        engine = ReplicationEngine(settings())
+        self.assertIsNone(engine._user_snapshot({"format": 1}))
+        self.assertIsNone(engine._user_snapshot({"format": 2}))
+
     def test_main_export_uses_complete_supported_scope(self):
         engine = ReplicationEngine(settings("leader"))
         engine.state_store = MagicMock()
@@ -46,7 +51,11 @@ class EngineScopeTests(unittest.TestCase):
         engine.outbound_store = Mock()
         engine.store = Mock()
         with patch("failovarr.engine.export_domains", return_value={}) as export, patch(
-            "failovarr.engine.export_client_identity", return_value={"format": 1, "users": []},
+            "failovarr.engine.export_user_snapshot",
+            return_value={"format": 1, "fields": [], "users": []},
+        ), patch(
+            "failovarr.engine.encrypt_user_snapshot",
+            return_value={"format": 1, "algorithm": "AES-256-GCM", "nonce": "AA==", "ciphertext": "AA=="},
         ):
             result = engine.export_now()
         exported_config = export.call_args.args[0]
@@ -241,9 +250,7 @@ class EngineScopeTests(unittest.TestCase):
         engine.state_store.read_state.return_value = state
         engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
         with patch.object(engine, "_m3u_hash_key_conflict", return_value=None), patch(
-            "failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
-            "failovarr.engine.require_matching_client_identity", return_value={"status": "disabled"},
-        ), patch.object(
+            "failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch.object(
             engine, "_remember_disabled_records",
         ), patch.object(engine, "_accept_handoff_grant") as grant, patch.object(
             engine, "_accept_cold_shutdown",
@@ -270,9 +277,7 @@ class EngineScopeTests(unittest.TestCase):
         engine.state_store.read_state.return_value = state
         engine.state_store.exclusive_lock.return_value.__enter__.return_value = None
         with patch.object(engine, "_m3u_hash_key_conflict", return_value=None), patch(
-            "failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch(
-            "failovarr.engine.require_matching_client_identity", return_value={"status": "disabled"},
-        ), patch.object(engine, "_remember_disabled_records"):
+            "failovarr.engine.apply_domains", return_value={"status": "applied", "domains": {}}), patch.object(engine, "_remember_disabled_records"):
             result = engine.apply_latest()
 
         self.assertEqual(result["status"], "applied")

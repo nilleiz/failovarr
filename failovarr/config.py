@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
+from .user_accounts import normalize_user_import_rules
+
 
 PLUGIN_DB_KEY = "failovarr"
 DEFAULT_KNOWN_HOSTS_PATH = "/data/failovarr-state/known_hosts"
@@ -374,7 +376,6 @@ def build_plugin_fields(settings: Mapping[str, Any] | None = None,
         _info(AUTOMATION_TEXT["section"], AUTOMATION_TEXT["cold_standby_disabled"] if current.get("redundancy_mode") == "cold_standby" and not as_bool(current.get("auto_start", True)) else "Bundle retention is fixed at three. Validate configuration and storage before enabling automation."),
         {"id": "auto_start", "label": AUTOMATION_TEXT["auto_start_label"], "type": "boolean", "default": as_bool(current.get("auto_start", True)), "description": AUTOMATION_TEXT["auto_start_main"] if role == "leader" else AUTOMATION_TEXT["auto_start_follower"]},
         {"id": "interval_seconds", "label": AUTOMATION_TEXT["interval_label"], "type": "number", "default": int(current.get("interval_seconds", 60)), "description": AUTOMATION_TEXT["interval_description"]},
-        {"id": "client_identity_users", "label": "Client identity users", "type": "string", "default": current.get("client_identity_users", "*"), "description": "Use * to protect all IPTV API identities without exposing their credentials."},
         {"id": "confirm", "label": "Confirm actions", "type": "boolean", "default": as_bool(current.get("confirm", True)), "description": "Require Dispatcharr confirmation for sensitive actions."},
     ])
     if role == "follower" and current.get("redundancy_mode") != "cold_standby":
@@ -593,6 +594,7 @@ class ReplicationConfig:
     domains: tuple[str, ...]
     core_setting_keys: tuple[str, ...]
     client_identity_users: tuple[str, ...]
+    user_import_rules: dict[str, Any]
     local_overrides: dict[str, Any]
     protected_output_profile_ids: tuple[int, ...]
     protected_records: dict[str, tuple[int, ...]]
@@ -659,6 +661,10 @@ class ReplicationConfig:
             domains=domains,
             core_setting_keys=parse_csv(settings.get("core_setting_keys", "")),
             client_identity_users=parse_csv(settings.get("client_identity_users", "*")),
+            user_import_rules=normalize_user_import_rules(
+                settings.get("user_import_rules"),
+                settings.get("client_identity_users", "*"),
+            ),
             local_overrides=parse_json_object(settings.get("local_overrides", "{}"), "local_overrides"),
             protected_output_profile_ids=protected_output_ids,
             protected_records=protected_records,

@@ -32,6 +32,17 @@ the reviewed bundle hash, and retries that same import. It does not run
 Dispatcharr's destructive stream-rehash task: replicated streams already carry
 the authoritative Main hashes.
 
+## Dispatcharr user accounts
+
+Version-3 bundles carry user accounts and their Group, Permission and Channel
+Profile relationships in an AES-GCM encrypted section. The Follower selects
+all Main users by default; its saved per-user rules can exclude accounts and
+can follow Main's active state or force a selected account active or inactive.
+New Main accounts follow the saved default. Matching uses usernames and keeps
+the Follower's local user IDs. Unselected and Follower-only users remain
+unchanged; Failovarr never deletes accounts. Formats 1 and 2 remain usable for
+ordinary data imports but do not change users.
+
 ## 0.8.0 lifecycle-bundle upgrade
 
 Version 2 bundles carry the authoritative Stream and channel-group/account
@@ -57,7 +68,7 @@ Initialization:
 4. clears only rebuildable EPG cache data;
 5. replaces the selected graph inside one transaction.
 
-Locked records, unsupported external references, client-identity mismatches or
+Locked records, unsupported external references, missing user dependencies or
 unresolvable recording relationships block the operation before partial data is
 applied. Keep the generated backup until the Follower has passed real client
 checks.

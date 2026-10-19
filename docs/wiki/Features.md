@@ -12,6 +12,7 @@
 ## Implemented, verification incomplete
 
 - CORE-004 — Signed Stream availability lifecycle replication.
+- CORE-005 — Encrypted user-account replication with Follower-local selection.
 - HANDOFF-001 — Planned online handoff and plugin-managed Linux VIP; no
   witness/fencing proof.
 - RECOVERY-001 — Production-like initialization and restore; no independent

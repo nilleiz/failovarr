@@ -17,16 +17,17 @@ already applied for this Follower scope. It is not an import failure.
 2. Confirm that the old container is stopped and no longer owns the shared
    production IP.
 3. Start the Follower with automatic replication enabled.
-4. Verify its one-time startup import, service status, client identity and a
+4. Verify its one-time startup import, service status, selected user accounts and a
    real M3U/EPG/stream request.
 5. Only then expose the reused client IP to users.
 
 Returning nodes always begin as Followers of the newer authority. Never restore
 an old Main backup over newer Follower changes.
 
-When upgrading to 0.8.0, install it on Main and publish a fresh format-2 bundle
-before a Follower is activated. The new bundle includes Stream availability
-lifecycle state, so preview it before the normal cold-standby import.
+For 0.8.5, update the Follower first so it can read format-3 bundles. Then
+update Main and export a fresh bundle. Preview selected user accounts and
+relationships before the normal import. Formats 1 and 2 continue to import
+their data without changing users.
 
 ## Planned online handoff
 
