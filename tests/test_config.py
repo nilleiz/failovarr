@@ -135,9 +135,29 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not enabled"):
             ReplicationConfig.from_settings(settings)
 
-    def test_client_identity_guard_checks_all_credential_users_by_default(self):
+    def test_legacy_wildcard_migrates_to_all_users_selected(self):
         config = ReplicationConfig.from_settings(BASE)
         self.assertEqual(config.client_identity_users, ("*",))
+        self.assertTrue(config.user_import_rules["default_selected"])
+        self.assertEqual(config.user_import_rules["users"], {})
+
+    def test_legacy_username_list_migrates_to_exact_selected_users(self):
+        config = ReplicationConfig.from_settings({**BASE, "client_identity_users": "viewer,editor"})
+        self.assertFalse(config.user_import_rules["default_selected"])
+        self.assertEqual(config.user_import_rules["users"], {
+            "viewer": {"selected": True, "active": "follow"},
+            "editor": {"selected": True, "active": "follow"},
+        })
+
+    def test_user_import_rules_validate_target_active_policy(self):
+        with self.assertRaisesRegex(ValueError, "active policy"):
+            ReplicationConfig.from_settings({
+                **BASE,
+                "user_import_rules": {
+                    "format": 1, "default_selected": True,
+                    "users": {"viewer": {"active": "sometimes"}},
+                },
+            })
 
     def test_client_identity_wildcard_cannot_be_combined(self):
         settings = {**BASE, "client_identity_users": "*,viewer"}

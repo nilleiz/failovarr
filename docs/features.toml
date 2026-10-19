@@ -25,6 +25,12 @@ status = "implemented_incomplete"
 evidence = "0.8.0 package and synthetic-cluster qualification pending"
 
 [[feature]]
+id = "CORE-005"
+title = "Encrypted user-account replication with Follower-local selection"
+status = "implemented_incomplete"
+evidence = "0.8.5 package and synthetic-cluster qualification pending"
+
+[[feature]]
 id = "UX-001"
 title = "Setup Assistant and native non-secret Plugin Settings"
 status = "implemented_verified"

@@ -1,3 +1,13 @@
+# 0.8.5 Dispatcharr user import gate
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| P805-01 | A verified bundle can carry Dispatcharr users without exposing password hashes, API keys or custom properties in previews, logs or plaintext bundle fields. | Add a version-3 signed bundle with an AES-GCM encrypted user snapshot keyed from the cluster secret; validate before use and retain format-1/2 compatibility. | Encryption round-trip, wrong-key, ciphertext-tampering and invalid-object tests; preview/log redaction checks. | implemented; CI pending |
+| P805-02 | A Follower can persistently select Main users and set each selected user's active state to follow Main, active or inactive. | Store follower-local per-username selection and active-state overrides; default new Main users to selected and active state to follow Main. | Settings/API/UI coverage for all-users default, individual exclusions, status overrides and newly added Main users. | implemented; CI pending |
+| P805-03 | Selected users reconcile by username while preserving local primary keys and relationships; excluded and follower-only users remain unchanged and never block an import. | Validate the complete user graph and dependencies before mutation, then upsert selected accounts in the import transaction; never delete accounts. | Create/update, credentials, profile/group/permission relations, local-ID preservation, exclusion, local-only-admin regression and rollback tests. | implemented; CI pending |
+| P805-04 | Legacy client-identity rules migrate to user import selection without preserving the identity comparison that rejects follower-only accounts. | Convert legacy `*` to all users selected and a legacy username list to exactly those selections; remove the global mismatch gate. | Migration tests for wildcard/list/empty values and regression for a follower-only `admin`. | implemented; CI pending |
+| P805-05 | User changes are skipped for bundle formats 1 and 2, while malformed or incompatible format-3 user graphs fail before any data or user changes. | Accept formats 1 and 2 unchanged without users; require an encrypted user section in format 3 and reject invalid user payloads transactionally with an actionable error. | Format compatibility, legacy no-user-data, schema/dependency failure and no-partial-import tests. | implemented; CI pending |
+
 # 0.8.4 SFTP pointer recovery gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |
@@ -27,7 +37,7 @@
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |
 | --- | --- | --- | --- | --- |
-| P801-01 | A passive Follower can repair local drift by deliberately reapplying its current verified Main bundle. | Accept force-reapply only for the exact applied sequence, payload hash and Follower scope; preserve transactional planning, client identity and local-protection rules. | Package tests and synthetic-cluster drift-repair scenario. | implemented; CI pending |
+| P801-01 | A passive Follower can repair local drift by deliberately reapplying its current verified Main bundle. | Accept force-reapply only for the exact applied sequence, payload hash and Follower scope; preserve transactional planning, user-import and local-protection rules. | Package tests and synthetic-cluster drift-repair scenario. | implemented; CI pending |
 | P801-02 | Force-reapply must not weaken replay or active/passive safety. | Reject older, changed, incompatible or untrusted bundles and authoritative nodes; do not process Handoff, promotion, VIP or cold-standby effects during a reapply. | Engine safety and Handoff regression tests. | implemented; CI pending |
 | P801-03 | Operators can invoke force-reapply intentionally without making normal replay an error-prone workflow. | Show a confirmed Setup Assistant control only for a current Follower bundle and provide an explicitly confirmed native plugin action. | Setup Assistant and plugin-action coverage. | implemented; CI pending |
 

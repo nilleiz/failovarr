@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 
-BUNDLE_FORMAT = 2
-SUPPORTED_BUNDLE_FORMATS = frozenset((1, BUNDLE_FORMAT))
+BUNDLE_FORMAT = 3
+SUPPORTED_BUNDLE_FORMATS = frozenset((1, 2, BUNDLE_FORMAT))
 
 
 def canonical_json(value: Any) -> bytes:
@@ -29,11 +29,14 @@ def create_envelope(
     *, cluster_id: str, source_node: str, sequence: int,
     domains: Mapping[str, Any], secret: str, created_at: str | None = None,
     client_identity: Mapping[str, Any] | None = None,
+    encrypted_users: Mapping[str, Any] | None = None,
     handoff: Mapping[str, Any] | None = None,
     scope: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
-        "format": BUNDLE_FORMAT,
+        # Helpers without a user section remain useful for producing legacy
+        # format-2 fixtures. Production exports always provide encrypted users.
+        "format": BUNDLE_FORMAT if encrypted_users is not None else 2,
         "cluster_id": cluster_id,
         "source_node": source_node,
         "sequence": int(sequence),
@@ -42,6 +45,8 @@ def create_envelope(
     }
     if client_identity is not None:
         payload["client_identity"] = dict(client_identity)
+    if encrypted_users is not None:
+        payload["encrypted_users"] = dict(encrypted_users)
     if handoff is not None:
         payload["handoff"] = dict(handoff)
     if scope is not None:
@@ -68,11 +73,11 @@ def verify_envelope(envelope: Mapping[str, Any], secret: str, cluster_id: str) -
     expected = sign_payload(payload, secret)
     if not hmac.compare_digest(expected, signature):
         raise ValueError("Bundle signature is invalid")
-    if payload.get("format") not in SUPPORTED_BUNDLE_FORMATS:
+    if type(payload.get("format")) is not int or payload.get("format") not in SUPPORTED_BUNDLE_FORMATS:
         raise ValueError(f"Unsupported bundle format: {payload.get('format')}")
     if payload.get("cluster_id") != cluster_id:
         raise ValueError("Bundle belongs to a different cluster")
-    if not isinstance(payload.get("sequence"), int) or payload["sequence"] < 1:
+    if type(payload.get("sequence")) is not int or payload["sequence"] < 1:
         raise ValueError("Bundle sequence must be a positive integer")
     created_at = payload.get("created_at")
     if not isinstance(created_at, str) or not created_at:
@@ -87,6 +92,18 @@ def verify_envelope(envelope: Mapping[str, Any], secret: str, cluster_id: str) -
         raise ValueError("Bundle created_at must include a timezone")
     if not isinstance(payload.get("domains"), dict):
         raise ValueError("Bundle domains must be an object")
+    if payload.get("format") == 3:
+        encrypted_users = payload.get("encrypted_users")
+        if (
+            not isinstance(encrypted_users, dict)
+            or set(encrypted_users) != {"format", "algorithm", "nonce", "ciphertext"}
+            or type(encrypted_users.get("format")) is not int
+            or encrypted_users.get("format") != 1
+            or encrypted_users.get("algorithm") != "AES-256-GCM"
+            or not isinstance(encrypted_users.get("nonce"), str)
+            or not isinstance(encrypted_users.get("ciphertext"), str)
+        ):
+            raise ValueError("Bundle format 3 requires a valid encrypted user section")
     if "client_identity" in payload and not isinstance(payload["client_identity"], dict):
         raise ValueError("Bundle client_identity must be an object")
     if "handoff" in payload and not isinstance(payload["handoff"], dict):

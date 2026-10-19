@@ -12,9 +12,16 @@ sensitive URLs or credentials. Protect management traffic and storage with a
 firewall, VLAN, WireGuard and/or TLS. Treat Main configuration profiles that
 include storage passwords as plaintext secrets.
 
-Secrets, Dispatcharr users, API keys, private SFTP keys and plugin-specific
-settings are not replicated by default. Client identity is compared as a
-non-reversible keyed fingerprint, not copied into a bundle.
+Storage credentials, private SFTP keys and plugin-specific settings are not
+replicated by default. Version-3 bundles can include Dispatcharr user accounts
+only in an AES-GCM encrypted section. The key is derived from the cluster
+secret, and the section is authenticated by both AES-GCM and the signed bundle.
+It contains password hashes, API keys, account properties and user relations;
+those values are never included in previews or logs. A Follower applies only
+the usernames selected in its node-local import rules, retains its own user
+primary keys, and does not delete accounts. Selected users also receive Main's
+account privileges, including staff and superuser flags, so restrict selection
+to trusted accounts. Formats 1 and 2 remain readable without user changes.
 
 ## Current limitations
 

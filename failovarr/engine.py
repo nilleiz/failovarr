@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from .bundle import canonical_json, create_envelope, verify_envelope
-from .client_identity import export_client_identity, require_matching_client_identity
 from .config import (
     CORE_SETTING_GROUPS,
     ReplicationConfig,
@@ -34,6 +33,14 @@ from .remote_storage import create_bundle_store
 from .transport import BundleHttpServer, fetch_latest, fetch_status
 from .autostart import FLUSH_KEY, LEASE_TTL_SECONDS, STOP_KEY, refresh_service_lease, release_service_lease
 from .vip import VipManager
+from .user_accounts import (
+    apply_user_import,
+    decrypt_user_snapshot,
+    encrypt_user_snapshot,
+    export_user_snapshot,
+    prepare_user_import,
+    preview_user_snapshot,
+)
 
 
 class ExpectedBundleState(ValueError):
@@ -103,13 +110,24 @@ class ReplicationEngine:
                 int(state.get("applied_sequence", 0)),
             ) + 1
             export_config = self._full_export_config()
+            created_at = datetime.now(timezone.utc).isoformat()
+            encryption_context = {
+                "cluster_id": self.config.cluster_id,
+                "source_node": self.config.node_id,
+                "sequence": sequence,
+                "created_at": created_at,
+            }
+            encrypted_users = encrypt_user_snapshot(
+                export_user_snapshot(), export_config.shared_secret, encryption_context,
+            )
             envelope = create_envelope(
                 cluster_id=self.config.cluster_id,
                 source_node=self.config.node_id,
                 sequence=sequence,
                 domains=export_domains(export_config),
                 secret=export_config.shared_secret,
-                client_identity=export_client_identity(export_config),
+                created_at=created_at,
+                encrypted_users=encrypted_users,
                 handoff=handoff,
                 scope={
                     "domains": list(export_config.domains),
@@ -385,6 +403,60 @@ class ReplicationEngine:
             ]
         return selected
 
+    def _user_snapshot(self, payload: Mapping[str, Any]) -> dict[str, Any] | None:
+        if payload.get("format", 1) < 3:
+            return None
+        context = {
+            "cluster_id": payload["cluster_id"],
+            "source_node": payload["source_node"],
+            "sequence": payload["sequence"],
+            "created_at": payload["created_at"],
+        }
+        return decrypt_user_snapshot(payload.get("encrypted_users"), self.config.shared_secret, context)
+
+    def _prepare_user_import(self, payload: Mapping[str, Any], config: ReplicationConfig):
+        snapshot = self._user_snapshot(payload)
+        if snapshot is None:
+            return None
+        available_profiles: set[str] = set()
+        if "channel_profiles" in config.domains:
+            domains = payload.get("domains", {})
+            incoming = domains.get("channel_profiles", []) if isinstance(domains, Mapping) else []
+            if not isinstance(incoming, list) or any(not isinstance(row, Mapping) for row in incoming):
+                raise ValueError("Bundle channel_profiles domain is invalid for user relationship validation")
+            available_profiles = {
+                row.get("name") for row in incoming
+                if isinstance(row.get("name"), str) and row.get("name")
+            }
+        return prepare_user_import(snapshot, config.user_import_rules, available_profiles)
+
+    @staticmethod
+    def _user_import_summary(prepared: list[dict[str, Any]] | None, snapshot: Mapping[str, Any] | None) -> dict[str, Any]:
+        if prepared is None:
+            return {"status": "skipped", "reason": "legacy_bundle"}
+        source_count = len(snapshot.get("users", [])) if isinstance(snapshot, Mapping) else len(prepared)
+        created = sum(item["instance"] is None for item in prepared)
+        updated = len(prepared) - created
+        return {
+            "status": "ready", "selected": len(prepared), "created": created,
+            "updated": updated, "skipped": max(0, source_count - len(prepared)),
+        }
+
+    def user_import_preview(self, rules: Any = None) -> dict[str, Any]:
+        if self.config.role != "follower":
+            return {"status": "not_applicable", "users": [], "message": "User import selection is available on a Follower."}
+        _envelope, payload = self.verified_candidate(require_new=False)
+        self.config_for_payload(payload)
+        snapshot = self._user_snapshot(payload)
+        if snapshot is None:
+            return {
+                "status": "legacy_bundle", "users": [],
+                "message": "This Main bundle has no encrypted users. Update Main and export a format-3 bundle to configure user imports.",
+            }
+        return preview_user_snapshot(
+            snapshot, self.config.user_import_rules if rules is None else rules,
+        )
+
     def bundle_info(self) -> dict[str, Any]:
         """Return sanitized follower-facing metadata about the latest bundle."""
         try:
@@ -465,12 +537,13 @@ class ReplicationEngine:
         mismatch = self._m3u_hash_key_conflict(envelope, payload)
         if mismatch:
             return mismatch
-        client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
         plans = plan_domains(self._selected_payload_domains(payload, scoped_config), scoped_config)
+        snapshot = self._user_snapshot(payload)
+        user_plan = self._prepare_user_import(payload, scoped_config)
         return {
             "status": "preview", "sequence": payload["sequence"],
             "source_node": payload["source_node"], "summary": summarize_plan(plans),
-            "client_identity": client_identity,
+            "user_import": self._user_import_summary(user_plan, snapshot),
             "conflicts": summarize_conflicts(plans),
             "scope": payload.get("scope", {"domains": list(scoped_config.domains), "core_setting_keys": list(scoped_config.core_setting_keys)}),
         }
@@ -492,7 +565,6 @@ class ReplicationEngine:
             mismatch = self._m3u_hash_key_conflict(envelope, payload)
             if mismatch:
                 return mismatch
-            client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
             handoff = payload.get("handoff")
             if handoff is not None:
                 if handoff.get("source_node") != payload["source_node"]:
@@ -512,11 +584,36 @@ class ReplicationEngine:
                     if self.config.deployment_mode != "cold_standby":
                         raise ValueError("Cold-standby handoff received by an online node")
                     cold_takeover = handoff
-            result = apply_domains(self._selected_payload_domains(payload, scoped_config), scoped_config)
+            snapshot = self._user_snapshot(payload)
+            selected_domains = self._selected_payload_domains(payload, scoped_config)
+            user_plan = self._prepare_user_import(payload, scoped_config)
+            if user_plan is None:
+                result = apply_domains(selected_domains, scoped_config)
+                user_summary = self._user_import_summary(None, None)
+            else:
+                from django.db import transaction
+
+                user_import_started = False
+                try:
+                    with transaction.atomic():
+                        result = apply_domains(selected_domains, scoped_config)
+                        if result["status"] == "applied":
+                            user_import_started = True
+                            user_summary = apply_user_import(user_plan)
+                            user_summary.update({"status": "applied"})
+                        else:
+                            user_summary = {"status": "skipped", "reason": "domain_conflicts"}
+                except Exception:
+                    if user_import_started:
+                        raise ValueError(
+                            "Selected Dispatcharr user accounts could not be imported; "
+                            "the complete database transaction was rolled back"
+                        ) from None
+                    raise
+            result["user_import"] = user_summary
             result.update({
                 "sequence": payload["sequence"],
                 "source_node": payload["source_node"],
-                "client_identity": client_identity,
                 "forced_reapply": force_reapply,
             })
             if result["status"] == "applied":
@@ -566,19 +663,42 @@ class ReplicationEngine:
             mismatch = self._m3u_hash_key_conflict(envelope, payload)
             if mismatch:
                 return mismatch
-            client_identity = require_matching_client_identity(payload.get("client_identity"), scoped_config)
-
             # Dispatcharr's own full-backup service is deliberately called
             # immediately before the transaction so the operator has a native
             # recovery point for this destructive, one-time operation.
             from apps.backups import services as backup_services
 
+            snapshot = self._user_snapshot(payload)
+            selected_domains = self._selected_payload_domains(payload, scoped_config)
+            user_plan = self._prepare_user_import(payload, scoped_config)
             backup_path = backup_services.create_backup()
-            result = initialize_domains(self._selected_payload_domains(payload, scoped_config), scoped_config)
+            if user_plan is None:
+                result = initialize_domains(selected_domains, scoped_config)
+                user_summary = self._user_import_summary(None, None)
+            else:
+                from django.db import transaction
+
+                user_import_started = False
+                try:
+                    with transaction.atomic():
+                        result = initialize_domains(selected_domains, scoped_config)
+                        if result["status"] == "initialized":
+                            user_import_started = True
+                            user_summary = apply_user_import(user_plan)
+                            user_summary.update({"status": "applied"})
+                        else:
+                            user_summary = {"status": "skipped", "reason": "domain_conflicts"}
+                except Exception:
+                    if user_import_started:
+                        raise ValueError(
+                            "Selected Dispatcharr user accounts could not be imported; "
+                            "the complete database transaction was rolled back"
+                        ) from None
+                    raise
+            result["user_import"] = user_summary
             result.update({
                 "sequence": payload["sequence"],
                 "source_node": payload["source_node"],
-                "client_identity": client_identity,
                 "backup": posixpath.basename(str(backup_path)),
             })
             if result["status"] == "initialized":

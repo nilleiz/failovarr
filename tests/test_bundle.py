@@ -1,9 +1,12 @@
 import os
 import unittest
+import base64
+from importlib.util import find_spec
 
 os.environ["FAILOVARR_NO_AUTOSTART"] = "1"
 
 from failovarr.bundle import BUNDLE_FORMAT, create_envelope, payload_hash, sign_payload, verify_envelope
+from failovarr.user_accounts import decrypt_user_snapshot, encrypt_user_snapshot
 
 
 class BundleTests(unittest.TestCase):
@@ -17,7 +20,8 @@ class BundleTests(unittest.TestCase):
         )
         payload = verify_envelope(envelope, self.secret, "home")
         self.assertEqual(payload["sequence"], 7)
-        self.assertEqual(payload["format"], BUNDLE_FORMAT)
+        self.assertEqual(payload["format"], 2)
+        self.assertEqual(BUNDLE_FORMAT, 3)
         self.assertEqual(payload["domains"]["output_profiles"][0]["id"], 3)
 
     def test_created_at_must_be_a_timezone_aware_iso_timestamp(self):
@@ -56,12 +60,49 @@ class BundleTests(unittest.TestCase):
             cluster_id="home", source_node="main", sequence=7,
             domains={}, secret=self.secret,
         )
-        envelope["payload"]["format"] = 3
+        envelope["payload"]["format"] = 4
         envelope["payload_sha256"] = payload_hash(envelope["payload"])
         envelope["signature"] = sign_payload(envelope["payload"], self.secret)
 
-        with self.assertRaisesRegex(ValueError, "Unsupported bundle format: 3"):
+        with self.assertRaisesRegex(ValueError, "Unsupported bundle format: 4"):
             verify_envelope(envelope, self.secret, "home")
+
+    def test_format_three_requires_encrypted_users(self):
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=7,
+            domains={}, secret=self.secret,
+        )
+        envelope["payload"]["format"] = 3
+        envelope["payload_sha256"] = payload_hash(envelope["payload"])
+        envelope["signature"] = sign_payload(envelope["payload"], self.secret)
+        with self.assertRaisesRegex(ValueError, "requires a valid encrypted user section"):
+            verify_envelope(envelope, self.secret, "home")
+
+    @unittest.skipUnless(find_spec("cryptography"), "Dispatcharr supplies cryptography at runtime")
+    def test_encrypted_user_snapshot_round_trip_and_authentication(self):
+        context = {
+            "cluster_id": "home", "source_node": "main", "sequence": 7,
+            "created_at": "2026-08-13T12:00:00+00:00",
+        }
+        snapshot = {"format": 1, "fields": [], "users": []}
+        encrypted = encrypt_user_snapshot(snapshot, self.secret, context)
+        envelope = create_envelope(
+            cluster_id="home", source_node="main", sequence=7,
+            domains={}, secret=self.secret, created_at=context["created_at"],
+            encrypted_users=encrypted,
+        )
+        payload = verify_envelope(envelope, self.secret, "home")
+        self.assertEqual(payload["format"], 3)
+        self.assertEqual(decrypt_user_snapshot(encrypted, self.secret, context), snapshot)
+        with self.assertRaisesRegex(ValueError, "authentication"):
+            decrypt_user_snapshot(encrypted, "wrong-secret", context)
+
+        altered = dict(encrypted)
+        ciphertext = bytearray(base64.b64decode(altered["ciphertext"]))
+        ciphertext[0] ^= 1
+        altered["ciphertext"] = base64.b64encode(ciphertext).decode("ascii")
+        with self.assertRaisesRegex(ValueError, "authentication"):
+            decrypt_user_snapshot(altered, self.secret, context)
 
     def test_client_identity_is_signed_but_optional(self):
         envelope = create_envelope(

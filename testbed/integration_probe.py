@@ -6,6 +6,8 @@ It uses synthetic profiles and a synthetic HMAC key only.
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import logging
 import os
@@ -34,11 +36,16 @@ from apps.channels.models import (
 from apps.epg.models import EPGData, EPGSource
 from apps.m3u.models import M3UAccount, M3UAccountProfile, M3UFilter, ServerGroup
 from apps.accounts.models import User
+from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.models import Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from core.models import CoreSettings, OutputProfile
 from failovarr.engine import ReplicationEngine
+from failovarr.bundle import payload_hash, sign_payload
 from failovarr.config import FULL_DOMAINS
 from failovarr.node_config import CONFIG_PATH, save_node_config
 from failovarr.transport import fetch_status
+from failovarr.user_accounts import decrypt_user_snapshot, encrypt_user_snapshot
 
 
 ACTION = os.environ.get("FAILOVARR_TEST_ACTION", "inspect")
@@ -167,7 +174,15 @@ def graph_settings(role: str):
     settings["domains"] = GRAPH_DOMAINS
     settings["local_overrides"] = "{}"
     settings["protected_output_profile_ids"] = ""
-    settings["client_identity_users"] = "redundancy-fixture"
+    settings["user_import_rules"] = {
+        "format": 1,
+        "default_selected": True,
+        "users": {
+            "redundancy-fixture": {"active": "inactive"},
+            "redundancy-created": {"active": "active"},
+            "redundancy-excluded": {"selected": False},
+        },
+    }
     return settings
 
 
@@ -373,21 +388,100 @@ def prepare_graph():
     EPGSource.objects.filter(pk=7305).update(refresh_task=epg_task)
 
 
-def prepare_client_identity():
-    User.objects.update_or_create(
+def prepare_main_user():
+    # Main deliberately lacks the Follower-only admin. This reproduces the old
+    # wildcard identity mismatch without real credentials.
+    User.objects.exclude(username="redundancy-fixture").delete()
+    User.objects.filter(username="redundancy-fixture").delete()
+    User.objects.filter(pk__in=(7316, 7317, 7318)).delete()
+    group, _ = Group.objects.get_or_create(name="failovarr-fixture-group")
+    content_type = ContentType.objects.get_for_model(User)
+    permission = Permission.objects.get(
+        content_type=content_type, codename=f"change_{User._meta.model_name}",
+    )
+    user = User.objects.create(
         id=7316,
+        username="redundancy-fixture",
+        password=make_password("synthetic-fixture-password"),
+        api_key="synthetic-api-key",
+        is_staff=True,
+        is_superuser=True,
+        is_active=True,
+        user_level=0,
+        stream_limit=2,
+        avatar_config={"fixture": "main"},
+        custom_properties={
+            "xc_password": "synthetic-xc-password",
+            "output_profile": 303,
+            "output_format": "mpegts",
+        },
+    )
+    user.groups.set([group])
+    user.user_permissions.set([permission])
+    user.channel_profiles.set([ChannelProfile.objects.get(pk=7312)])
+    User.objects.create(
+        username="redundancy-excluded",
+        password=make_password("synthetic-excluded-password"),
+        api_key="synthetic-excluded-api-key",
+        is_active=True,
+        user_level=0,
+        custom_properties={"fixture": "excluded"},
+    )
+    User.objects.create(
+        id=7317,
+        username="redundancy-created",
+        password=make_password("synthetic-created-password"),
+        api_key="synthetic-created-api-key",
+        is_active=False,
+        user_level=0,
+        custom_properties={"fixture": "created"},
+    )
+    User.objects.create(
+        id=7318,
+        username="redundancy-follow",
+        password=make_password("synthetic-follow-password"),
+        api_key="synthetic-follow-api-key",
+        is_active=False,
+        user_level=0,
+        custom_properties={"fixture": "follow"},
+    )
+
+
+def prepare_follower_only_admin():
+    User.objects.filter(username__in=(
+        "redundancy-fixture", "redundancy-excluded", "redundancy-created", "redundancy-follow",
+    )).delete()
+    User.objects.filter(pk__in=(7399, 7400)).delete()
+    Group.objects.get_or_create(name="failovarr-fixture-group")
+    # Matching username with a different local primary key exercises update
+    # semantics while proving the Follower's ID remains stable.
+    User.objects.create(
+        id=7399,
+        username="redundancy-fixture",
+        password="local-fixture-password-hash",
+        api_key="local-fixture-api-key",
+        is_active=False,
+        user_level=1,
+        custom_properties={"source": "follower-local"},
+    )
+    User.objects.create(
+        id=7400,
+        username="redundancy-excluded",
+        password="local-excluded-password-hash",
+        api_key="local-excluded-api-key",
+        is_active=False,
+        user_level=2,
+        custom_properties={"source": "follower-excluded"},
+    )
+    User.objects.update_or_create(
+        username="admin",
         defaults={
-            "username": "redundancy-fixture",
-            "password": "!",
-            "api_key": "synthetic-api-key",
+            "password": "local-admin-password-hash",
+            "api_key": "local-admin-key",
             "is_active": True,
-            "user_level": 0,
-            "stream_limit": 2,
-            "custom_properties": {
-                "xc_password": "synthetic-xc-password",
-                "output_profile": 303,
-                "output_format": "mpegts",
-            },
+            "user_level": 10,
+            "stream_limit": 0,
+            "custom_properties": {"source": "slave-only"},
         },
     )
 
@@ -632,14 +726,14 @@ elif ACTION == "tamper_rejected":
 
 elif ACTION == "prepare_graph_main":
     prepare_graph()
-    prepare_client_identity()
+    prepare_main_user()
     manager = configure("leader", graph_settings("leader"))
     result = manager.run_action(PLUGIN_KEY, "validate_config")
     emit(result, result.get("status") == "success")
 
 elif ACTION == "prepare_graph_slave":
     cleanup_graph()
-    prepare_client_identity()
+    prepare_follower_only_admin()
     manager = configure("follower", graph_settings("follower"))
     result = manager.run_action(PLUGIN_KEY, "validate_config")
     emit(result, result.get("status") == "success")
@@ -649,33 +743,162 @@ elif ACTION == "export_graph":
     result = manager.run_action(PLUGIN_KEY, "export_now")
     emit(result, result.get("status") == "exported")
 
-elif ACTION == "client_identity_mismatch":
+elif ACTION == "invalid_user_section_is_rejected_atomically":
     manager = configure("follower", graph_settings("follower"))
-    user = User.objects.get(username="redundancy-fixture")
-    original = dict(user.custom_properties or {})
-    changed = dict(original)
-    changed["xc_password"] = "deliberately-different"
-    user.custom_properties = changed
-    user.save(update_fields=["custom_properties"])
+    latest_path = Path(SHARED_PATH) / "latest.json"
+    pointer = json.loads(latest_path.read_text(encoding="utf-8"))
+    object_name = pointer.get("object")
+    bundle_path = latest_path if object_name is None else Path(SHARED_PATH) / str(object_name)
+    original = bundle_path.read_bytes()
+    original_fixture = User.objects.get(username="redundancy-fixture")
+    original_fixture_state = (
+        original_fixture.pk, original_fixture.password, original_fixture.api_key,
+        original_fixture.custom_properties.copy(),
+    )
+    log_output = io.StringIO()
+    log_handler = logging.StreamHandler(log_output)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
     try:
-        result = manager.run_action(PLUGIN_KEY, "preview_latest")
+        envelope = json.loads(original)
+        payload = envelope["payload"]
+        context = {key: payload[key] for key in ("cluster_id", "source_node", "sequence", "created_at")}
+
+        # A validly signed bundle with a changed GCM ciphertext must fail
+        # before domain or account writes begin.
+        tampered = json.loads(original)
+        ciphertext = bytearray(base64.b64decode(tampered["payload"]["encrypted_users"]["ciphertext"]))
+        ciphertext[0] ^= 1
+        tampered["payload"]["encrypted_users"]["ciphertext"] = base64.b64encode(ciphertext).decode("ascii")
+        tampered["payload_sha256"] = payload_hash(tampered["payload"])
+        tampered["signature"] = sign_payload(tampered["payload"], SHARED_SECRET)
+        bundle_path.write_text(json.dumps(tampered), encoding="utf-8")
+        ciphertext_result = manager.run_action(PLUGIN_KEY, "apply_latest")
+        fixture_after_ciphertext = User.objects.get(username="redundancy-fixture")
+        ciphertext_unchanged = (
+            not M3UAccount.objects.filter(pk=7302).exists()
+            and not User.objects.filter(username="redundancy-created").exists()
+            and not User.objects.filter(username="redundancy-follow").exists()
+            and (
+                fixture_after_ciphertext.pk,
+                fixture_after_ciphertext.password,
+                fixture_after_ciphertext.api_key,
+                fixture_after_ciphertext.custom_properties,
+            ) == original_fixture_state
+        )
+
+        snapshot = decrypt_user_snapshot(payload["encrypted_users"], SHARED_SECRET, context)
+        snapshot["users"][0]["relationships"]["groups"] = "not-an-array"
+        payload["encrypted_users"] = encrypt_user_snapshot(snapshot, SHARED_SECRET, context)
+        envelope["payload_sha256"] = payload_hash(payload)
+        envelope["signature"] = sign_payload(payload, SHARED_SECRET)
+        bundle_path.write_text(json.dumps(envelope), encoding="utf-8")
+        result = manager.run_action(PLUGIN_KEY, "apply_latest")
+
+        # Missing selected relationship dependencies also fail before the
+        # replication graph or any account is changed.
+        dependency_envelope = json.loads(original)
+        dependency_payload = dependency_envelope["payload"]
+        dependency_snapshot = decrypt_user_snapshot(
+            dependency_payload["encrypted_users"], SHARED_SECRET, context,
+        )
+        fixture_record = next(
+            row for row in dependency_snapshot["users"]
+            if row["fields"]["username"] == "redundancy-fixture"
+        )
+        fixture_record["relationships"]["channel_profiles"] = ["Missing Synthetic Channel Profile"]
+        dependency_payload["encrypted_users"] = encrypt_user_snapshot(
+            dependency_snapshot, SHARED_SECRET, context,
+        )
+        dependency_envelope["payload_sha256"] = payload_hash(dependency_payload)
+        dependency_envelope["signature"] = sign_payload(dependency_payload, SHARED_SECRET)
+        bundle_path.write_text(json.dumps(dependency_envelope), encoding="utf-8")
+        dependency_result = manager.run_action(PLUGIN_KEY, "apply_latest")
+        fixture_after_dependency = User.objects.get(username="redundancy-fixture")
+        dependency_unchanged = (
+            not M3UAccount.objects.filter(pk=7302).exists()
+            and not User.objects.filter(username="redundancy-created").exists()
+            and not User.objects.filter(username="redundancy-follow").exists()
+            and (
+                fixture_after_dependency.pk,
+                fixture_after_dependency.password,
+                fixture_after_dependency.api_key,
+                fixture_after_dependency.custom_properties,
+            ) == original_fixture_state
+        )
     finally:
-        user.custom_properties = original
-        user.save(update_fields=["custom_properties"])
+        bundle_path.write_bytes(original)
+        root_logger.removeHandler(log_handler)
+    fixture_after_schema = User.objects.get(username="redundancy-fixture")
+    captured_logs = log_output.getvalue()
+    sensitive_markers = (
+        original_fixture.password, original_fixture.api_key,
+        "local-admin-key", "local-excluded-api-key", "synthetic-api-key",
+        "synthetic-xc-password", "synthetic-excluded-api-key",
+        "synthetic-created-api-key", "synthetic-follow-api-key",
+    )
     probe = {
         "status": result.get("status"),
-        "identity_mismatch_rejected": (
-            "Client identity mismatch" in result.get("message", "")
-            and "redundancy-fixture" in result.get("message", "")
-            and "deliberately-different" not in result.get("message", "")
+        "ciphertext_rejected": ciphertext_result.get("status") == "error"
+        and "authentication or decoding failed" in ciphertext_result.get("message", ""),
+        "ciphertext_no_partial_changes": ciphertext_unchanged,
+        "user_schema_rejected": "groups relationships" in result.get("message", ""),
+        "dependency_rejected": dependency_result.get("status") == "error"
+        and "missing Follower dependencies" in dependency_result.get("message", ""),
+        "dependency_no_partial_changes": dependency_unchanged,
+        "domain_unchanged": not M3UAccount.objects.filter(pk=7302).exists(),
+        "user_unchanged": (
+            (
+                fixture_after_schema.pk,
+                fixture_after_schema.password,
+                fixture_after_schema.api_key,
+                fixture_after_schema.custom_properties,
+            ) == original_fixture_state
+            and not User.objects.filter(username="redundancy-created").exists()
+            and not User.objects.filter(username="redundancy-follow").exists()
+        ),
+        "credentials_hidden": not any(
+            value and value in json.dumps({
+                "ciphertext": ciphertext_result,
+                "schema": result,
+                "dependency": dependency_result,
+            }) + captured_logs
+            for value in sensitive_markers
         ),
     }
-    emit(probe, probe["status"] == "error" and probe["identity_mismatch_rejected"])
+    emit(probe, probe["status"] == "error" and all(probe[key] for key in (
+        "ciphertext_rejected", "ciphertext_no_partial_changes", "user_schema_rejected",
+        "dependency_rejected", "dependency_no_partial_changes",
+        "domain_unchanged", "user_unchanged", "credentials_hidden",
+    )))
+
+elif ACTION == "local_only_admin_does_not_block":
+    manager = configure("follower", graph_settings("follower"))
+    admin = User.objects.get(username="admin")
+    original = (admin.pk, admin.api_key, dict(admin.custom_properties or {}))
+    result = manager.run_action(PLUGIN_KEY, "preview_latest")
+    admin.refresh_from_db()
+    probe = {
+        "status": result.get("status"),
+        "main_user_selected": (result.get("user_import") or {}).get("selected") == 3,
+        "credentials_hidden": not any(value in json.dumps(result) for value in (
+            "synthetic-api-key", "synthetic-xc-password", "synthetic-excluded-api-key",
+        )),
+        "follower_only_admin_preserved": (admin.pk, admin.api_key, dict(admin.custom_properties or {})) == original,
+    }
+    emit(probe, probe["status"] == "preview" and all(probe[key] for key in (
+        "main_user_selected", "credentials_hidden", "follower_only_admin_preserved",
+    )))
 
 elif ACTION == "apply_graph_verify":
     manager = configure("follower", graph_settings("follower"))
     preview = manager.run_action(PLUGIN_KEY, "preview_latest")
     applied = manager.run_action(PLUGIN_KEY, "apply_latest")
+    user = User.objects.get(username="redundancy-fixture")
+    created_user = User.objects.get(username="redundancy-created")
+    follow_user = User.objects.get(username="redundancy-follow")
+    excluded_user = User.objects.get(username="redundancy-excluded")
+    admin = User.objects.get(username="admin")
     account = M3UAccount.objects.get(pk=7302)
     channel = Channel.objects.get(pk=7310)
     channel_override = ChannelOverride.objects.get(pk=7311)
@@ -712,6 +935,35 @@ elif ACTION == "apply_graph_verify":
             account.username == "synthetic-user"
             and account.password == "synthetic-password"
         ),
+        "user_fields_and_relationships_copied": (
+            user.pk == 7399
+            and user.api_key == "synthetic-api-key"
+            and user.check_password("synthetic-fixture-password")
+            and user.is_staff
+            and user.is_superuser
+            and not user.is_active
+            and user.custom_properties.get("xc_password") == "synthetic-xc-password"
+            and list(user.groups.values_list("name", flat=True)) == ["failovarr-fixture-group"]
+            and list(user.channel_profiles.values_list("name", flat=True)) == ["Synthetic Clients"]
+            and user.user_permissions.filter(codename=f"change_{User._meta.model_name}").exists()
+        ),
+        "selected_missing_user_created": (
+            created_user.api_key == "synthetic-created-api-key"
+            and created_user.check_password("synthetic-created-password")
+            and created_user.is_active
+        ),
+        "main_active_state_followed": (
+            follow_user.api_key == "synthetic-follow-api-key"
+            and follow_user.check_password("synthetic-follow-password")
+            and not follow_user.is_active
+        ),
+        "excluded_user_preserved": (
+            excluded_user.pk == 7400
+            and excluded_user.api_key == "local-excluded-api-key"
+            and excluded_user.custom_properties == {"source": "follower-excluded"}
+            and not excluded_user.is_active
+        ),
+        "follower_only_admin_survives_import": admin.api_key == "local-admin-key",
         "cron_schedules_preserved": (
             f"{m3u_cron.minute} {m3u_cron.hour} {m3u_cron.day_of_month} {m3u_cron.month_of_year} {m3u_cron.day_of_week}"
             == "15 4 * * *"
@@ -733,6 +985,11 @@ elif ACTION == "apply_graph_verify":
         applied.get("status") == "applied",
         probe["all_ids_present"],
         probe["credentials_preserved"],
+        probe["user_fields_and_relationships_copied"],
+        probe["selected_missing_user_created"],
+        probe["main_active_state_followed"],
+        probe["excluded_user_preserved"],
+        probe["follower_only_admin_survives_import"],
         probe["cron_schedules_preserved"],
         probe["stable_channel_uuid"],
         probe["relations_preserved"],

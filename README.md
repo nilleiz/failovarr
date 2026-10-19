@@ -27,8 +27,11 @@ unplanned failover.
 - Stream availability lifecycle (`is_stale` and `last_seen`) is part of the
   signed Stream and channel-group/account snapshot. Runtime viewer and stream
   statistics remain local to each Dispatcharr node.
-- Users, API keys, EPG programme caches, runtime data, backups and third-party
-  plugin settings are not replicated.
+- Version-3 bundles replicate selected Dispatcharr users with AES-GCM encrypted
+  password hashes, API keys and relations. Per-user selection and active-state
+  overrides remain local to each Follower; unselected and local-only users are
+  preserved. EPG programme caches, runtime data, backups and third-party plugin
+  settings are not replicated.
 
 ## Supported modes and storage
 

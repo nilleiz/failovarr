@@ -5,6 +5,7 @@
 | Documentation, community files, metadata | repository contract | all documentation IDs |
 | Python/UI/planning logic | package | CORE-*, UX-* |
 | Replication, lifecycle, ORM adapters, transport, handoff or VIP | package + synthetic cluster | CORE-*, TRANSPORT-001, HANDOFF-001 |
+| User-account encryption, user relationships, or follower import policy | package + synthetic cluster | P805-01–P805-05 |
 | Storage backends, vendor dependencies or storage fixtures | package + synthetic storage | STORAGE-001 |
 | Release publishing workflow or unit-test change | package | release and unit-test contracts |
 | Classifier, qualification workflow or shared CI helper | full qualification | all |
