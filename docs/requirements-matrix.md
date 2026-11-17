@@ -3,6 +3,7 @@
 | ID | Requirement | Implementation | Acceptance evidence | Status |
 | --- | --- | --- | --- | --- |
 | COMPAT-001 | A new stable Dispatcharr release is checked against Failovarr automatically without changing the pinned CI baseline. | Scheduled/manual `dispatcharr-compat.yml` resolves the latest stable release, skips already-checked releases (one issue per release), substitutes the candidate image digest in the runner checkout only, runs the synthetic cluster and storage suites, and records the verdict as a closed (compatible) or open (incompatible) issue. | First scheduled or manual run; workflow review. | implemented; CI pending |
+| COMPAT-002 | The synthetic cluster fixtures must run on Dispatcharr v0.34.0, whose `OutputProfile.save()` rejects a new row with an explicit primary key (found by the first compatibility run). | Create fixed-ID OutputProfile fixtures with the existing `upsert_without_signals` helper (`bulk_create`, the same path the plugin import uses). Plugin code is unaffected. | Cluster suite on the pinned image in this PR; then a forced `dispatcharr-compat` run for v0.34.0. | implemented; CI pending |
 
 # Follower relation identity repair
 
