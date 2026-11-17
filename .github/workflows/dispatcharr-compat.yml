@@ -1,0 +1,165 @@
+name: dispatcharr compatibility
+
+# Checks Failovarr against every new stable Dispatcharr release. The pinned
+# images in testbed/*.yml stay untouched; the candidate image is substituted
+# only inside the ephemeral runner checkout. Results are recorded as one issue
+# per Dispatcharr release (closed = compatible, open = incompatible).
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dispatcharr_tag:
+        description: Dispatcharr release tag to check (empty = latest stable release)
+        required: false
+        default: ""
+        type: string
+      force:
+        description: Re-run even when this release was already checked
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: failovarr-dispatcharr-compat
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    name: detect new stable release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      check: ${{ steps.resolve.outputs.check }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      digest: ${{ steps.resolve.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.dispatcharr_tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          tag="$REQUESTED_TAG"
+          if [ -z "$tag" ]; then
+            # /releases/latest never returns drafts or pre-releases.
+            tag="$(gh api repos/Dispatcharr/Dispatcharr/releases/latest --jq .tag_name)"
+          fi
+          if ! [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Unexpected release tag" >&2; exit 1
+          fi
+          echo "Dispatcharr release: $tag"
+
+          title="Dispatcharr compatibility: $tag"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$title\" in:title" --json title --jq "[.[] | select(.title == \"$title\")] | length")"
+          if [ "$existing" -gt 0 ] && [ "$FORCE" != "true" ]; then
+            echo "Release $tag was already checked; nothing to do."
+            echo "check=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Release tags and image tags may differ by a leading "v".
+          image=""
+          for candidate in "$tag" "${tag#v}" "v${tag#v}"; do
+            if docker pull "ghcr.io/dispatcharr/dispatcharr:$candidate" >/dev/null 2>&1; then
+              image="ghcr.io/dispatcharr/dispatcharr:$candidate"; break
+            fi
+          done
+          if [ -z "$image" ]; then
+            echo "No container image found for Dispatcharr $tag" >&2; exit 1
+          fi
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$image")"
+          digest="${digest#*@}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Could not resolve image digest" >&2; exit 1; }
+
+          pinned="$(grep -ho 'ghcr.io/dispatcharr/dispatcharr@sha256:[0-9a-f]*' testbed/ci-cluster-compose.yml | head -n1)"
+          if [ "${pinned#*@}" = "$digest" ] && [ "$FORCE" != "true" ]; then
+            echo "Release $tag is already the pinned qualification image."
+            echo "check=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "check=true"
+            echo "tag=$tag"
+            echo "digest=$digest"
+          } >> "$GITHUB_OUTPUT"
+
+  suite:
+    name: ${{ matrix.suite }} on ${{ needs.detect.outputs.tag }}
+    needs: detect
+    if: needs.detect.outputs.check == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [cluster, storage]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Substitute candidate Dispatcharr image (runner checkout only)
+        env:
+          DIGEST: ${{ needs.detect.outputs.digest }}
+        run: |
+          set -euo pipefail
+          for file in testbed/ci-cluster-compose.yml testbed/ci-storage-compose.yml; do
+            sed -i -E "s#ghcr.io/dispatcharr/dispatcharr@sha256:[0-9a-f]+#ghcr.io/dispatcharr/dispatcharr@${DIGEST}#" "$file"
+            grep -q "dispatcharr@${DIGEST}" "$file"
+          done
+      - run: pwsh -NoProfile -File "tools/ci/run_${{ matrix.suite }}.ps1"
+
+  report:
+    name: record result
+    needs: [detect, suite]
+    if: always() && needs.detect.outputs.check == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.detect.outputs.tag }}
+          DIGEST: ${{ needs.detect.outputs.digest }}
+          RESULT: ${{ needs.suite.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Dispatcharr compatibility: $TAG"
+          if [ "$RESULT" = "success" ]; then
+            verdict="compatible"
+          else
+            verdict="INCOMPATIBLE or check failed ($RESULT)"
+          fi
+          body="Synthetic cluster and storage suites against Dispatcharr \`$TAG\` (\`$DIGEST\`): **$verdict**.
+
+          Run: $RUN_URL
+
+          This check does not change the pinned CI image. Adopting a new baseline (digest in \`testbed/ci-*-compose.yml\`, \`min_dispatcharr_version\`) is a separate, reviewed pull request."
+          body="$(printf '%s' "$body" | sed 's/^          //')"
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$title\" in:title" --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")"
+          if [ -z "$number" ]; then
+            url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body")"
+            number="${url##*/}"
+          else
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi
+          if [ "$RESULT" = "success" ]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --reason completed || true
+          else
+            gh issue reopen "$number" --repo "$GITHUB_REPOSITORY" || true
+          fi
+          echo "### $title: $verdict" >> "$GITHUB_STEP_SUMMARY"

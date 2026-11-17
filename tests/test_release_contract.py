@@ -87,6 +87,14 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("classify test impact", workflows["test.yml"])
         self.assertNotIn("ready_for_review", workflows["test.yml"])
 
+    def test_dispatcharr_compat_workflow_is_scheduled_and_leaves_pins_untouched(self):
+        workflow = (ROOT / ".github" / "workflows" / "dispatcharr-compat.yml").read_text(encoding="utf-8")
+        self.assertIn("schedule:", workflow)
+        self.assertIn("releases/latest", workflow)
+        self.assertIn("run_${{ matrix.suite }}.ps1", workflow)
+        self.assertNotIn("git push", workflow)
+        self.assertNotIn("persist-credentials: true", workflow)
+
     def test_canonical_english_wiki_pages_and_community_readme_exist(self):
         wiki = ROOT / "docs" / "wiki"
         self.assertEqual({path.name for path in wiki.glob("*.md")}, WIKI_PAGES)
