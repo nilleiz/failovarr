@@ -9,6 +9,7 @@
 | Storage backends, vendor dependencies or storage fixtures | package + synthetic storage | STORAGE-001 |
 | Release publishing workflow or unit-test change | package | release and unit-test contracts |
 | Classifier, qualification workflow or shared CI helper | full qualification | all |
+| Dispatcharr compatibility workflow (`dispatcharr-compat.yml`) | full qualification (workflow change); afterwards scheduled daily, runs synthetic cluster + storage against each new stable Dispatcharr release | COMPAT-001 |
 | Release candidate | one explicit full qualification on the final PR tree; reuse allowed only for an identical squash-merge tree | all release-facing features |
 
 Removing a test requires an explanation in the pull request and an update to

@@ -1,3 +1,16 @@
+# Dispatcharr release compatibility watch
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| COMPAT-001 | A new stable Dispatcharr release is checked against Failovarr automatically without changing the pinned CI baseline. | Scheduled/manual `dispatcharr-compat.yml` resolves the latest stable release, skips already-checked releases (one issue per release), substitutes the candidate image digest in the runner checkout only, runs the synthetic cluster and storage suites, and records the verdict as a closed (compatible) or open (incompatible) issue. | First scheduled or manual run; workflow review. | implemented; CI pending |
+
+# Follower relation identity repair
+
+| ID | Requirement | Implementation | Acceptance evidence | Status |
+| --- | --- | --- | --- | --- |
+| REL-01 | Channel-group/account relations with equal endpoints reconcile despite different node-local row IDs. | Reuse surrogate-ID reconciliation for this unreferenced leaf relation. | Authorized acceptance: 14 conflicts before, zero after; transactional import and persisted sequence verified. Public CI pending. | implemented; acceptance verified |
+| REL-02 | Cold-standby startup must report a blocked import accurately. | Log success only for applied results and log blocked result status and reason. | Static review; public CI pending. | implemented; CI pending |
+
 # 0.8.5 Dispatcharr user import gate
 
 | ID | Requirement | Implementation | Acceptance evidence | Status |
