@@ -538,15 +538,15 @@ elif ACTION == "legacy_config_migration_verify":
 
 elif ACTION == "prepare_main":
     reset_handoff_state("leader", full_lab_reset=True)
-    OutputProfile.objects.update_or_create(
-        id=303,
-        defaults={
-            "name": "Synthetic HQ",
-            "command": "ffmpeg",
-            "parameters": "-synthetic-hardware cuda",
-            "locked": False,
-            "is_active": True,
-        },
+    # Dispatcharr >= 0.34 rejects save() of a new row with an explicit pk;
+    # bulk_create matches how Failovarr itself inserts imported records.
+    upsert_without_signals(
+        OutputProfile, 303,
+        name="Synthetic HQ",
+        command="ffmpeg",
+        parameters="-synthetic-hardware cuda",
+        locked=False,
+        is_active=True,
     )
     manager = configure("leader")
     result = manager.run_action(PLUGIN_KEY, "validate_config")
@@ -554,15 +554,15 @@ elif ACTION == "prepare_main":
 
 elif ACTION == "prepare_slave":
     reset_handoff_state("follower", full_lab_reset=True)
-    OutputProfile.objects.update_or_create(
-        id=303,
-        defaults={
-            "name": "Synthetic HQ",
-            "command": "ffmpeg",
-            "parameters": "-synthetic-hardware qsv",
-            "locked": False,
-            "is_active": True,
-        },
+    # Dispatcharr >= 0.34 rejects save() of a new row with an explicit pk;
+    # bulk_create matches how Failovarr itself inserts imported records.
+    upsert_without_signals(
+        OutputProfile, 303,
+        name="Synthetic HQ",
+        command="ffmpeg",
+        parameters="-synthetic-hardware qsv",
+        locked=False,
+        is_active=True,
     )
     manager = configure("follower")
     result = manager.run_action(PLUGIN_KEY, "validate_config")
@@ -1248,15 +1248,15 @@ elif ACTION == "initialize_core_scope_verify":
 elif ACTION == "serve_direct":
     # Remove the deliberately colliding record from the earlier conflict probe.
     OutputProfile.objects.filter(id=304, name="Synthetic direct profile").delete()
-    OutputProfile.objects.update_or_create(
-        id=404,
-        defaults={
-            "name": "Synthetic direct profile",
-            "command": "ffmpeg",
-            "parameters": "-synthetic-direct",
-            "locked": False,
-            "is_active": True,
-        },
+    # Dispatcharr >= 0.34 rejects save() of a new row with an explicit pk;
+    # bulk_create matches how Failovarr itself inserts imported records.
+    upsert_without_signals(
+        OutputProfile, 404,
+        name="Synthetic direct profile",
+        command="ffmpeg",
+        parameters="-synthetic-direct",
+        locked=False,
+        is_active=True,
     )
     manager = configure("leader", direct_settings("leader"))
     result = manager.run_action(PLUGIN_KEY, "start_service")
